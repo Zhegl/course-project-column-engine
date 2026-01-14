@@ -5,7 +5,7 @@ class FileReader {
 public:
     FileReader(const std::string& path);
 
-    void Read(char* data, size_t size);
+    bool Read(char* data, size_t size);
 
     template <typename T>
     T Read() {

@@ -7,6 +7,10 @@ FileReader::FileReader(const std::string& path) : stream_(path, std::ios::binary
     }
 }
 
-void FileReader::Read(char* data, size_t size) {
+bool FileReader::Read(char* data, size_t size) {
+    if (stream_.eof()) {
+        return false;
+    }
     stream_.read(data, size);
+    return true;
 }

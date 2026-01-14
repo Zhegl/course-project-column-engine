@@ -1,11 +1,17 @@
+#pragma once
 #include <string>
 #include <vector>
 
-enum class ColumnType { String = 0, Int64 = 1 };
+enum class ColumnTypeName { String = 0, Int64 = 1 };
 
 struct ColumnMetaData {
     std::string name;
-    ColumnType type;
+    ColumnTypeName type;
+};
+
+struct BatchMetaData {
+    size_t size;
+    size_t offset;
 };
 
 struct Scheme {

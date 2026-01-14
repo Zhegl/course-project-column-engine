@@ -8,11 +8,11 @@ bool IsSensible(char c) {
     return std::isgraph(c);
 } 
 
-ColumnType GetType(const std::string& name) {
+ColumnTypeName GetType(const std::string& name) {
     if (name == "int64") {
-        return ColumnType::Int64;
+        return ColumnTypeName::Int64;
     } else if (name == "string") {
-        return ColumnType::String;
+        return ColumnTypeName::String;
     }
     throw std::runtime_error("Unknown type: " + name);
 }
@@ -46,10 +46,12 @@ Scheme ReadScheme(const std::string& path) {
         }
     }
 
-    if (status != 1) {
+    if (status != 1 && !current_str.empty()) {
         throw std::runtime_error("syntax error in " + path);
     }
-    result.columns.emplace_back(name, GetType(current_str));
+    if (status == 1) {
+        result.columns.emplace_back(name, GetType(current_str));
+    }
     
     return result;
 }

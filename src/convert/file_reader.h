@@ -7,6 +7,8 @@ public:
 
     bool Read(char* data, size_t size);
 
+    bool Eof();
+
     template <typename T>
     T Read() {
         T result;

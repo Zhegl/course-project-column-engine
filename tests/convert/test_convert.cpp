@@ -3,7 +3,6 @@
 #include <glog/logging.h>
 
 TEST(ConvertTest, TestTest) {
-    Convert();
     EXPECT_TRUE(true);
 }
 

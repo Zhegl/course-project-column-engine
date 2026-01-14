@@ -1,5 +1,7 @@
 add_library(convert_lib
     convert.cpp
+    file_reader.cpp
+    file_writer.cpp
 )
 
 target_include_directories(convert_lib

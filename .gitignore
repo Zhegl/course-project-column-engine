@@ -1,6 +1,6 @@
 /build
-/.cache
 /.vscode
+/.cache
 *.o
 *.obj
 *.exe
@@ -9,3 +9,4 @@
 *.so
 *.dll
 *.dylib
+run-clang-format.py

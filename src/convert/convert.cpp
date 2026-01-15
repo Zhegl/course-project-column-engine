@@ -52,6 +52,7 @@ void Convert(const std::string input_path, const std::string scheme_path,
 
         for (size_t i = 0; i < scheme.columns.size(); ++i) {
             size_t add = WriteType(batch[i], scheme.columns[i].type, writer);
+            batch[i].clear();
             batch_meta.push_back({add, offset});
             offset += add;
         }

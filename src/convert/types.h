@@ -1,4 +1,5 @@
 #pragma once
+#include "file_reader.h"
 #include "metadata.h"
 #include "file_writer.h"
 #include <cstdint>
@@ -10,4 +11,12 @@ using ColumnType = std::variant<uint64_t, std::string>;
 
 ColumnType ConvertType(std::string val, ColumnTypeName type);
 
+std::string ColumnTypeToString(ColumnType data);
+
+std::string GetTypeName(ColumnTypeName type);
+
+ColumnTypeName GetType(const std::string& name);
+
 size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& writer);
+
+std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& reader);

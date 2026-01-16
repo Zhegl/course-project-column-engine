@@ -30,12 +30,12 @@ TEST(ConvertTest, SimpleConvert) {
         FileWriter writer2("simple_input.csv");
         writer2.Write("1,2,first,4\n5,1,second,2\n8,17,third,2");
     }
+    { ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar", 2); }
     {
-        Convert("simple_input.csv", "simple_scheme.csv", "simple_output.columnar");
+        FileReader reader("simple_output.columnar");
+        EXPECT_EQ(1, reader.Read<uint64_t>());
     }
-    FileReader reader("simple_output.columnar");
-    EXPECT_EQ(1, reader.Read<uint64_t>());
-
+    ConvertToCsv("simple_output.columnar", "simple_scheme.csv", "simple_csv.csv");
 }
 
 int main(int argc, char **argv) {

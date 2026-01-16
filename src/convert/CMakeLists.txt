@@ -4,6 +4,7 @@ add_library(convert_lib
     file_writer.cpp
     scheme_reader.cpp
     types.cpp
+    meta_reader.cpp
 )
 
 target_include_directories(convert_lib

@@ -3,19 +3,11 @@
 #include <stdexcept>
 #include <string>
 #include "file_reader.h"
+#include "types.h"
 
 bool IsSensible(char c) {
     return std::isgraph(c);
 } 
-
-ColumnTypeName GetType(const std::string& name) {
-    if (name == "int64") {
-        return ColumnTypeName::Int64;
-    } else if (name == "string") {
-        return ColumnTypeName::String;
-    }
-    throw std::runtime_error("Unknown type: " + name);
-}
 
 Scheme ReadScheme(const std::string& path) {
     Scheme result;

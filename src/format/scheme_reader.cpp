@@ -27,10 +27,12 @@ Scheme ReadScheme(const std::string& path) {
             current_str.clear();
             ++status;
         } else if (symbol == '\n') {
-            if (status != 1) {
+            if (status != 1 && !current_str.empty()) {
                 throw std::runtime_error("syntax error in " + path);
             }
-            result.columns.emplace_back(name, GetType(current_str));
+            if (status == 1) {
+                result.columns.emplace_back(name, GetType(current_str));
+            }
             current_str.clear();
             status = 0;
         } else if (IsSensible(symbol)) {

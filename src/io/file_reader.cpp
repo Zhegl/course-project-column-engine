@@ -13,10 +13,10 @@ bool FileReader::Eof() {
 }
 
 bool FileReader::Read(char* data, size_t size) {
+    stream_.read(data, size);
     if (stream_.eof()) {
         return false;
     }
-    stream_.read(data, size);
     return true;
 }
 

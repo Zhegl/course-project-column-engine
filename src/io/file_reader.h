@@ -1,3 +1,4 @@
+#pragma once
 #include <fstream>
 #include <string>
 
@@ -8,6 +9,10 @@ public:
     bool Read(char* data, size_t size);
 
     bool Eof();
+
+    void Jump(size_t offset);
+
+    size_t Size();
 
     template <typename T>
     T Read() {

@@ -1,9 +1,5 @@
 add_library(convert_lib
     convert.cpp
-    file_reader.cpp
-    file_writer.cpp
-    scheme_reader.cpp
-    types.cpp
 )
 
 target_include_directories(convert_lib
@@ -16,11 +12,10 @@ target_link_libraries(convert_lib
         glog::glog
 )
 
-add_executable(convert
-    run_convert.cpp
-)
-
-target_link_libraries(convert
-    PRIVATE
-        convert_lib
+target_link_libraries(convert_lib
+    PUBLIC
+        format_lib
+        io_lib
+        types_lib
+        interface
 )

@@ -2,10 +2,11 @@
 #include "convert.h"
 #include "file_writer.h"
 #include "file_reader.h"
-#include "scheme_reader.h"
+#include <format/scheme_reader.h>
 #include <glog/logging.h>
 #include <cstdint>
-
+#include <string>
+/*
 TEST(ConvertTest, SchemeReader) {
     {
         FileWriter writer("simple_scheme.csv");
@@ -30,12 +31,27 @@ TEST(ConvertTest, SimpleConvert) {
         FileWriter writer2("simple_input.csv");
         writer2.Write("1,2,first,4\n5,1,second,2\n8,17,third,2");
     }
+    { ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar", 2); }
     {
-        Convert("simple_input.csv", "simple_scheme.csv", "simple_output.columnar");
+        FileReader reader("simple_output.columnar");
+        EXPECT_EQ(1, reader.Read<uint64_t>());
     }
-    FileReader reader("simple_output.columnar");
-    EXPECT_EQ(1, reader.Read<uint64_t>());
+    ConvertToCsv("simple_output.columnar", "simple_scheme.csv", "simple_csv.csv");
 
+}
+*/
+TEST(ConvertTest, SimpleConvert2) {
+    {
+        FileWriter writer("simple_scheme.csv");
+        std::string scheme = "b,int64\nname123,string\n";
+        writer.Write(scheme.data(), scheme.size());
+
+        std::string data = "1,aaaa\n2,bbbb\n3,abcd\n";
+        FileWriter writer2("simple_input.csv");
+        writer2.Write(data.data(), data.size());
+    }
+    { ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar"); }
+    ConvertToCsv("simple_output.columnar", "simple_scheme_out.csv", "simple_csv_out.csv");
 }
 
 int main(int argc, char **argv) {

@@ -2,20 +2,12 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
-#include "file_reader.h"
+#include <interface/metadata.h>
+#include <types/types.h>
 
 bool IsSensible(char c) {
     return std::isgraph(c);
 } 
-
-ColumnTypeName GetType(const std::string& name) {
-    if (name == "int64") {
-        return ColumnTypeName::Int64;
-    } else if (name == "string") {
-        return ColumnTypeName::String;
-    }
-    throw std::runtime_error("Unknown type: " + name);
-}
 
 Scheme ReadScheme(const std::string& path) {
     Scheme result;
@@ -35,10 +27,12 @@ Scheme ReadScheme(const std::string& path) {
             current_str.clear();
             ++status;
         } else if (symbol == '\n') {
-            if (status != 1) {
+            if (status != 1 && !current_str.empty()) {
                 throw std::runtime_error("syntax error in " + path);
             }
-            result.columns.emplace_back(name, GetType(current_str));
+            if (status == 1) {
+                result.columns.emplace_back(name, GetType(current_str));
+            }
             current_str.clear();
             status = 0;
         } else if (IsSensible(symbol)) {

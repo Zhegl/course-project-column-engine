@@ -5,7 +5,7 @@
 #include <string>
 #include <variant>
 #include <vector>
-#include "metadata.h"
+#include <interface/metadata.h>
 
 ColumnType ConvertType(std::string val, ColumnTypeName type) {
     if (type == ColumnTypeName::Int64) {

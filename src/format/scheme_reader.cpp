@@ -2,8 +2,8 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
-#include "file_reader.h"
-#include "types.h"
+#include <interface/metadata.h>
+#include <types/types.h>
 
 bool IsSensible(char c) {
     return std::isgraph(c);

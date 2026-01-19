@@ -1,1 +1,6 @@
 add_subdirectory(convert)
+add_subdirectory(app)
+add_subdirectory(format)
+add_subdirectory(io)
+add_subdirectory(types)
+add_subdirectory(interface)

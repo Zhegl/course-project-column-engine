@@ -1,9 +1,9 @@
 #include "convert.h"
-#include "metadata.h"
-#include "scheme_reader.h"
-#include "meta_reader.h"
-#include "types.h"
-#include "file_reader.h"
+#include <interface/metadata.h>
+#include <format/scheme_reader.h>
+#include <format/meta_reader.h>
+#include <types/types.h>
+#include <io/file_reader.h>
 #include <glog/logging.h>
 #include <sys/types.h>
 #include <cassert>

@@ -1,7 +1,7 @@
 #pragma once
-#include "file_reader.h"
-#include "metadata.h"
-#include "file_writer.h"
+#include <io/file_reader.h>
+#include <interface/metadata.h>
+#include <io/file_writer.h>
 #include <cstdint>
 #include <string>
 #include <variant>

@@ -2,7 +2,7 @@
 #include "convert.h"
 #include "file_writer.h"
 #include "file_reader.h"
-#include "scheme_reader.h"
+#include <format/scheme_reader.h>
 #include <glog/logging.h>
 #include <cstdint>
 
@@ -36,6 +36,7 @@ TEST(ConvertTest, SimpleConvert) {
         EXPECT_EQ(1, reader.Read<uint64_t>());
     }
     ConvertToCsv("simple_output.columnar", "simple_scheme.csv", "simple_csv.csv");
+    
 }
 
 int main(int argc, char **argv) {

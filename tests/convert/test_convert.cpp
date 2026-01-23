@@ -7,7 +7,6 @@
 #include <cstdint>
 #include <string>
 
-
 TEST(ConvertTest, SchemeReader) {
     {
         column_engine::FileWriter writer("simple_scheme.csv");
@@ -16,14 +15,15 @@ TEST(ConvertTest, SchemeReader) {
     column_engine::Scheme result = column_engine::ReadScheme("simple_scheme.csv");
     column_engine::Scheme correct;
     EXPECT_EQ("a", result.columns[0].name);
-    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[0].type);
+    EXPECT_EQ("int64", result.columns[0].type->GetTypeName());
     EXPECT_EQ("b", result.columns[1].name);
-    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[1].type);
+    EXPECT_EQ("int64", result.columns[1].type->GetTypeName());
     EXPECT_EQ("name123", result.columns[2].name);
-    EXPECT_EQ(column_engine::ColumnTypeName::String, result.columns[2].type);
+    EXPECT_EQ("string", result.columns[2].type->GetTypeName());
     EXPECT_EQ("d", result.columns[3].name);
-    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[3].type);
+    EXPECT_EQ("int64", result.columns[3].type->GetTypeName());
 }
+
 
 TEST(ConvertTest, SimpleConvert) {
     {

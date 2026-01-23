@@ -16,9 +16,20 @@ std::vector<BatchMetaData> GetBatchMeta(FileReader& reader, size_t batches_amoun
 Scheme GetScheme(FileReader& reader, size_t columns_amount) {
     Scheme result;
     for (size_t i = 0; i < columns_amount; ++i) {
-        auto type = reader.Read<ColumnTypeName>();
         std::string name;
         char symbol;
+
+        while (reader.Read(&symbol, 1)) {
+            if (symbol == '\000') {
+                break;
+            }
+            name.push_back(symbol);
+        }
+
+
+        auto type = GetType(name);
+        name.clear();
+
         while (reader.Read(&symbol, 1)) {
             if (symbol == '\000') {
                 break;

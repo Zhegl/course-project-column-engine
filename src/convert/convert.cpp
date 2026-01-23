@@ -31,7 +31,7 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
             size_t status = 0;
             while (reader.Read(&symbol, 1)) {
                 if (symbol == ',' || symbol == '\n') {
-                    batch[status].push_back(ConvertType(current_str, scheme.columns[status].type));
+                    batch[status].push_back(scheme.columns[status].type->ConvertType(current_str));
                     current_str.clear();
                     ++status;
                     if (symbol == '\n') {
@@ -47,7 +47,7 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
             }
             if (reader.Eof()) {
                 if (status == scheme.columns.size() - 1) {
-                    batch[status].push_back(ConvertType(current_str, scheme.columns[status].type));
+                    batch[status].push_back(scheme.columns[status].type->ConvertType(current_str));
                 } else if (status != 0) {
                     throw std::runtime_error("syntax error in " + input_path);
                 }
@@ -56,7 +56,7 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
         }
 
         for (size_t i = 0; i < scheme.columns.size(); ++i) {
-            size_t add = WriteType(batch[i], scheme.columns[i].type, writer);
+            size_t add = scheme.columns[i].type->WriteType(batch[i], writer);
             batch[i].clear();
             batch_meta.push_back({add, offset});
             offset += add;
@@ -69,7 +69,8 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
     }
 
     for (auto col : scheme.columns) {
-        writer.Write(col.type);
+        auto type_name = col.type->GetTypeName();
+        writer.Write(type_name.data(), type_name.size() + 1);
         writer.Write(col.name.data(), col.name.size() + 1);
     }
 
@@ -83,7 +84,7 @@ void PrintScheme(Scheme scheme, const std::string& path) {
     for (const auto& column : scheme.columns) {
         writer.Write(column.name.data(), column.name.size());
         writer.Write(',');
-        auto type_name = GetTypeName(column.type);
+        auto type_name = column.type->GetTypeName();
         writer.Write(type_name.data(), type_name.size());
         writer.Write('\n');
     }
@@ -100,7 +101,7 @@ void PrintTable(Scheme scheme, std::vector<BatchMetaData> batch_meta, const std:
             if (batch >= batch_meta.size()) {
                 throw std::runtime_error("Batch metadata error");
             }
-            columns[col] = GetBatch(batch_meta[batch].size, scheme.columns[col].type, reader);
+            columns[col] = scheme.columns[col].type->GetBatch(batch_meta[batch].size, reader);
             ++batch;
         }
         for (size_t i = 0; i < columns[0].size(); ++i) {

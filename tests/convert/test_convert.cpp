@@ -6,52 +6,53 @@
 #include <glog/logging.h>
 #include <cstdint>
 #include <string>
-/*
+
+
 TEST(ConvertTest, SchemeReader) {
     {
-        FileWriter writer("simple_scheme.csv");
+        column_engine::FileWriter writer("simple_scheme.csv");
         writer.Write("a,int64\nb,int64\nname123,string\nd,int64");
     }
-    Scheme result = ReadScheme("simple_scheme.csv");
-    Scheme correct;
+    column_engine::Scheme result = column_engine::ReadScheme("simple_scheme.csv");
+    column_engine::Scheme correct;
     EXPECT_EQ("a", result.columns[0].name);
-    EXPECT_EQ(ColumnTypeName::Int64, result.columns[0].type);
+    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[0].type);
     EXPECT_EQ("b", result.columns[1].name);
-    EXPECT_EQ(ColumnTypeName::Int64, result.columns[1].type);
+    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[1].type);
     EXPECT_EQ("name123", result.columns[2].name);
-    EXPECT_EQ(ColumnTypeName::String, result.columns[2].type);
+    EXPECT_EQ(column_engine::ColumnTypeName::String, result.columns[2].type);
     EXPECT_EQ("d", result.columns[3].name);
-    EXPECT_EQ(ColumnTypeName::Int64, result.columns[3].type);
+    EXPECT_EQ(column_engine::ColumnTypeName::Int64, result.columns[3].type);
 }
 
 TEST(ConvertTest, SimpleConvert) {
     {
-        FileWriter writer("simple_scheme.csv");
+        column_engine::FileWriter writer("simple_scheme.csv");
         writer.Write("a,int64\nb,int64\nname123,string\nd,int64\n");
-        FileWriter writer2("simple_input.csv");
+        column_engine::FileWriter writer2("simple_input.csv");
         writer2.Write("1,2,first,4\n5,1,second,2\n8,17,third,2");
     }
-    { ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar", 2); }
+    { column_engine::ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar", 2); }
     {
-        FileReader reader("simple_output.columnar");
+        column_engine::FileReader reader("simple_output.columnar");
         EXPECT_EQ(1, reader.Read<uint64_t>());
     }
-    ConvertToCsv("simple_output.columnar", "simple_scheme.csv", "simple_csv.csv");
+    column_engine::ConvertToCsv("simple_output.columnar", "simple_scheme.csv", "simple_csv.csv");
 
 }
-*/
+
 TEST(ConvertTest, SimpleConvert2) {
     {
-        FileWriter writer("simple_scheme.csv");
+        column_engine::FileWriter writer("simple_scheme.csv");
         std::string scheme = "b,int64\nname123,string\n";
         writer.Write(scheme.data(), scheme.size());
 
         std::string data = "1,aaaa\n2,bbbb\n3,abcd\n";
-        FileWriter writer2("simple_input.csv");
+        column_engine::FileWriter writer2("simple_input.csv");
         writer2.Write(data.data(), data.size());
     }
-    { ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar"); }
-    ConvertToCsv("simple_output.columnar", "simple_scheme_out.csv", "simple_csv_out.csv");
+    { column_engine::ConvertToColumnar("simple_input.csv", "simple_scheme.csv", "simple_output.columnar"); }
+    column_engine::ConvertToCsv("simple_output.columnar", "simple_scheme_out.csv", "simple_csv_out.csv");
 }
 
 int main(int argc, char **argv) {

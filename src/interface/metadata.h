@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 
+namespace column_engine {
+
 enum class ColumnTypeName { String = 0, Int64 = 1 };
 
 struct ColumnMetaData {
@@ -17,3 +19,5 @@ struct BatchMetaData {
 struct Scheme {
     std::vector<ColumnMetaData> columns;
 };
+
+};  // namespace column_engine

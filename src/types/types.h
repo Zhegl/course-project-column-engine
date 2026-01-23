@@ -7,6 +7,8 @@
 #include <variant>
 #include <vector>
 
+namespace column_engine {
+
 using ColumnType = std::variant<uint64_t, std::string>;
 
 ColumnType ConvertType(std::string val, ColumnTypeName type);
@@ -20,3 +22,5 @@ ColumnTypeName GetType(const std::string& name);
 size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& writer);
 
 std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& reader);
+
+};

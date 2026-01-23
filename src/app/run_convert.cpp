@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <string>
 
+namespace column_engine {
+
 void Usage() {
     std::cout << "Usage: convert --input <file> --output <file> --scheme <file> [--batch <size>] "
                  "[--reversed]"
@@ -54,12 +56,14 @@ void Run(int argc, char** argv) {
     }
 }
 
+};  // namespace column_engine
+
 int main(int argc, char** argv) {
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = 1;
 
     try {
-        Run(argc, argv);
+        column_engine::Run(argc, argv);
     } catch (const std::exception& e) {
         std::cout << e.what() << std::endl;
         LOG(ERROR) << e.what();

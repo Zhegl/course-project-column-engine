@@ -1,6 +1,8 @@
 #include <fstream>
 #include <string>
 
+namespace column_engine {
+
 class FileWriter {
 public:
     FileWriter(const std::string& path);
@@ -15,3 +17,5 @@ public:
 private:
     std::ofstream stream_;
 };
+
+};  // namespace column_engine

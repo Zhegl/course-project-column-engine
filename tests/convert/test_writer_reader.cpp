@@ -8,11 +8,11 @@ TEST(WriterReaderTest, Simple) {
     uint64_t val = 42;
 
     {
-        FileWriter writer("test.columnar");
+        column_engine::FileWriter writer("test.columnar");
         writer.Write(val);
     }
     
-    FileReader reader("test.columnar");
+    column_engine::FileReader reader("test.columnar");
     uint64_t val_read = reader.Read<uint64_t>();
 
     EXPECT_EQ(val, val_read);

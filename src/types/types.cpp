@@ -7,6 +7,8 @@
 #include <vector>
 #include <interface/metadata.h>
 
+namespace column_engine {
+
 ColumnType ConvertType(std::string val, ColumnTypeName type) {
     if (type == ColumnTypeName::Int64) {
         return static_cast<uint64_t>(stoull(val));
@@ -49,7 +51,6 @@ size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& 
     return result;
 }
 
-
 std::string ColumnTypeToString(ColumnType data) {
     if (std::holds_alternative<uint64_t>(data)) {
         return std::to_string(std::get<uint64_t>(data));
@@ -85,3 +86,5 @@ std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& r
     }
     return result;
 }
+
+};  // namespace column_engine

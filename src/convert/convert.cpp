@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+namespace column_engine {
 void ConvertToColumnar(const std::string& input_path, const std::string& scheme_path,
                        const std::string& output_path, const size_t batch_size) {
     Scheme scheme = ReadScheme(scheme_path);
@@ -78,7 +79,6 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
     writer.Write(static_cast<uint64_t>(scheme.columns.size()));
 }
 
-
 void PrintScheme(Scheme scheme, const std::string& path) {
     FileWriter writer(path);
     for (const auto& column : scheme.columns) {
@@ -90,7 +90,8 @@ void PrintScheme(Scheme scheme, const std::string& path) {
     }
 }
 
-void PrintTable(Scheme scheme, std::vector<BatchMetaData> batch_meta, const std::string& input_path, const std::string& output_path) {
+void PrintTable(Scheme scheme, std::vector<BatchMetaData> batch_meta, const std::string& input_path,
+                const std::string& output_path) {
     FileReader reader(input_path);
     FileWriter writer(output_path);
     size_t batch = 0;
@@ -118,7 +119,8 @@ void PrintTable(Scheme scheme, std::vector<BatchMetaData> batch_meta, const std:
 
 void ConvertToCsv(const std::string& input_path, const std::string& scheme_path,
                   const std::string& output_path) {
-    auto [batch_meta, scheme] = GetMeta(input_path); 
+    auto [batch_meta, scheme] = GetMeta(input_path);
     PrintScheme(scheme, scheme_path);
     PrintTable(scheme, batch_meta, input_path, output_path);
 }
+};  // namespace column_engine

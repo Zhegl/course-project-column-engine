@@ -1,6 +1,5 @@
 #pragma once
 #include <io/file_reader.h>
-#include <interface/metadata.h>
 #include <io/file_writer.h>
 #include <cstdint>
 #include <string>
@@ -9,18 +8,34 @@
 
 namespace column_engine {
 
-using ColumnType = std::variant<uint64_t, std::string>;
+enum class ColumnTypeName { String = 0, Int64 = 1 };
 
-ColumnType ConvertType(std::string val, ColumnTypeName type);
+struct ColumnMetaData {
+    std::string name;
+    ColumnTypeName type;
+};
 
-std::string ColumnTypeToString(ColumnType data);
+struct BatchMetaData {
+    size_t size;
+    size_t offset;
+};
+
+struct Scheme {
+    std::vector<ColumnMetaData> columns;
+};
+
+using ColumnValue = std::variant<uint64_t, std::string>;
+
+ColumnValue ConvertType(std::string val, ColumnTypeName type);
+
+std::string ColumnTypeToString(ColumnValue data);
 
 std::string GetTypeName(ColumnTypeName type);
 
 ColumnTypeName GetType(const std::string& name);
 
-size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& writer);
+size_t WriteType(std::vector<ColumnValue> data, ColumnTypeName type, FileWriter& writer);
 
-std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& reader);
+std::vector<ColumnValue> GetBatch(size_t size, ColumnTypeName type, FileReader& reader);
 
-};
+};  // namespace column_engine

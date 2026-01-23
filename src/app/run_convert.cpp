@@ -2,7 +2,6 @@
 #include <glog/logging.h>
 #include <cstdlib>
 #include <iostream>
-#include <stdexcept>
 #include <string>
 
 namespace column_engine {

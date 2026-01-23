@@ -1,5 +1,4 @@
 #include "convert.h"
-#include <interface/metadata.h>
 #include <format/scheme_reader.h>
 #include <format/meta_reader.h>
 #include <types/types.h>
@@ -18,7 +17,7 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
                        const std::string& output_path, const size_t batch_size) {
     Scheme scheme = ReadScheme(scheme_path);
 
-    std::vector<std::vector<ColumnType>> batch(scheme.columns.size());
+    std::vector<std::vector<ColumnValue>> batch(scheme.columns.size());
     std::vector<BatchMetaData> batch_meta;
     size_t offset = 0;
 
@@ -96,7 +95,7 @@ void PrintTable(Scheme scheme, std::vector<BatchMetaData> batch_meta, const std:
     FileWriter writer(output_path);
     size_t batch = 0;
     while (batch < batch_meta.size()) {
-        std::vector<std::vector<ColumnType>> columns(scheme.columns.size());
+        std::vector<std::vector<ColumnValue>> columns(scheme.columns.size());
         for (size_t col = 0; col < scheme.columns.size(); ++col) {
             if (batch >= batch_meta.size()) {
                 throw std::runtime_error("Batch metadata error");

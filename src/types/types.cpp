@@ -5,11 +5,10 @@
 #include <string>
 #include <variant>
 #include <vector>
-#include <interface/metadata.h>
 
 namespace column_engine {
 
-ColumnType ConvertType(std::string val, ColumnTypeName type) {
+ColumnValue ConvertType(std::string val, ColumnTypeName type) {
     if (type == ColumnTypeName::Int64) {
         return static_cast<uint64_t>(stoull(val));
     } else {
@@ -35,7 +34,7 @@ std::string GetTypeName(ColumnTypeName type) {
     throw std::runtime_error("Unknown type in GetTypeName");
 }
 
-size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& writer) {
+size_t WriteType(std::vector<ColumnValue> data, ColumnTypeName type, FileWriter& writer) {
     size_t result = 0;
     if (type == ColumnTypeName::Int64) {
         for (auto val : data) {
@@ -51,7 +50,7 @@ size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& 
     return result;
 }
 
-std::string ColumnTypeToString(ColumnType data) {
+std::string ColumnTypeToString(ColumnValue data) {
     if (std::holds_alternative<uint64_t>(data)) {
         return std::to_string(std::get<uint64_t>(data));
     } else if (std::holds_alternative<std::string>(data)) {
@@ -60,8 +59,8 @@ std::string ColumnTypeToString(ColumnType data) {
     throw std::runtime_error("Unknown type in ColumnTypeToString");
 }
 
-std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& reader) {
-    std::vector<ColumnType> result;
+std::vector<ColumnValue> GetBatch(size_t size, ColumnTypeName type, FileReader& reader) {
+    std::vector<ColumnValue> result;
     if (type == ColumnTypeName::Int64) {
         while (size) {
             result.push_back(reader.Read<uint64_t>());

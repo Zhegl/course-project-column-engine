@@ -2,7 +2,6 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
-#include <interface/metadata.h>
 #include <types/types.h>
 
 namespace column_engine {

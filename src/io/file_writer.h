@@ -1,5 +1,9 @@
+#pragma once
+
 #include <fstream>
 #include <string>
+
+namespace column_engine {
 
 class FileWriter {
 public:
@@ -15,3 +19,5 @@ public:
 private:
     std::ofstream stream_;
 };
+
+};  // namespace column_engine

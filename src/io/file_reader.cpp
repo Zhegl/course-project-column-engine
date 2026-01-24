@@ -2,6 +2,8 @@
 #include <cstddef>
 #include <stdexcept>
 
+namespace column_engine {
+
 FileReader::FileReader(const std::string& path) : stream_(path, std::ios::binary) {
     if (!stream_) {
         throw std::runtime_error("Failed to open " + path);
@@ -32,3 +34,4 @@ size_t FileReader::Size() {
     return result;
 }
 
+};  // namespace column_engine

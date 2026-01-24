@@ -1,6 +1,8 @@
 #include "meta_reader.h"
 #include <glog/logging.h>
 
+namespace column_engine {
+
 std::vector<BatchMetaData> GetBatchMeta(FileReader& reader, size_t batches_amount) {
     std::vector<BatchMetaData> result;
     for (size_t i = 0; i < batches_amount; ++i) {
@@ -14,9 +16,20 @@ std::vector<BatchMetaData> GetBatchMeta(FileReader& reader, size_t batches_amoun
 Scheme GetScheme(FileReader& reader, size_t columns_amount) {
     Scheme result;
     for (size_t i = 0; i < columns_amount; ++i) {
-        auto type = reader.Read<ColumnTypeName>();
         std::string name;
         char symbol;
+
+        while (reader.Read(&symbol, 1)) {
+            if (symbol == '\000') {
+                break;
+            }
+            name.push_back(symbol);
+        }
+
+
+        auto type = GetType(name);
+        name.clear();
+
         while (reader.Read(&symbol, 1)) {
             if (symbol == '\000') {
                 break;
@@ -53,3 +66,5 @@ std::pair<std::vector<BatchMetaData>, Scheme> GetMeta(const std::string& path) {
     auto scheme = GetScheme(reader, columns_amount);
     return std::make_pair(batch_meta, scheme);
 }
+
+};  // namespace column_engine

@@ -2,6 +2,8 @@
 #include <fstream>
 #include <string>
 
+namespace column_engine {
+
 class FileReader {
 public:
     FileReader(const std::string& path);
@@ -24,3 +26,5 @@ public:
 private:
     std::ifstream stream_;
 };
+
+};  // namespace column_engine

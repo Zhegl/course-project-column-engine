@@ -2,12 +2,13 @@
 #include <cctype>
 #include <stdexcept>
 #include <string>
-#include <interface/metadata.h>
 #include <types/types.h>
+
+namespace column_engine {
 
 bool IsSensible(char c) {
     return std::isgraph(c);
-} 
+}
 
 Scheme ReadScheme(const std::string& path) {
     Scheme result;
@@ -46,6 +47,8 @@ Scheme ReadScheme(const std::string& path) {
     if (status == 1) {
         result.columns.emplace_back(name, GetType(current_str));
     }
-    
+
     return result;
 }
+
+};  // namespace column_engine

@@ -9,7 +9,7 @@
 
 namespace column_engine {
 
-using ColumnValue = std::variant<uint64_t, std::string>;
+using ColumnValue = std::variant<int64_t, std::string>;
 
 class ColumnTypeName {
 public:

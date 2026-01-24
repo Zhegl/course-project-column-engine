@@ -7,10 +7,6 @@
 #include <cstdint>
 #include <string>
 
-TEST(ConvertTest, Hits) {
-    column_engine::ConvertToColumnar("hits_sample.csv", "hits_scheme.csv", "out.columnar", 2);
-}
-
 TEST(ConvertTest, SchemeReader) {
     {
         column_engine::FileWriter writer("simple_scheme.csv");

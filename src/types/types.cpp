@@ -21,8 +21,8 @@ std::shared_ptr<ColumnTypeName> GetType(const std::string& name) {
 }
 
 std::string ColumnTypeToString(ColumnValue data) {
-    if (std::holds_alternative<uint64_t>(data)) {
-        return std::to_string(std::get<uint64_t>(data));
+    if (std::holds_alternative<int64_t>(data)) {
+        return std::to_string(std::get<int64_t>(data));
     } else if (std::holds_alternative<std::string>(data)) {
         return std::get<std::string>(data);
     }
@@ -69,17 +69,17 @@ std::string ColumnTypeInt64::GetTypeName() {
 
 ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
     try {
-        return static_cast<uint64_t>(stoull(val));
+        return static_cast<int64_t>(stoll(val));
     } catch (...) {
         LOG(ERROR) << val << " is not a int64";
-        return 0ull;
+        return 0ll;
     }
 }
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
     size_t result = 0;
     for (auto val : data) {
-        writer.Write(std::get<uint64_t>(val));
+        writer.Write(std::get<int64_t>(val));
         result += sizeof(uint64_t);
     }
     return result;
@@ -88,7 +88,7 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
 std::vector<ColumnValue> ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
     std::vector<ColumnValue> result;
     while (size) {
-        result.push_back(reader.Read<uint64_t>());
+        result.push_back(reader.Read<int64_t>());
         size -= sizeof(uint64_t);
     }
     return result;

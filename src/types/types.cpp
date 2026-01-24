@@ -68,7 +68,12 @@ std::string ColumnTypeInt64::GetTypeName() {
 }
 
 ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
-    return static_cast<uint64_t>(stoull(val));
+    try {
+        return static_cast<uint64_t>(stoull(val));
+    } catch (...) {
+        LOG(ERROR) << val << " is not a int64";
+        return 0ull;
+    }
 }
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {

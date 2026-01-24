@@ -29,8 +29,9 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
             char symbol;
             std::string current_str;
             size_t status = 0;
+            bool lock = false;
             while (reader.Read(&symbol, 1)) {
-                if (symbol == ',' || symbol == '\n') {
+                if ((symbol == ',' || symbol == '\n') && !lock) {
                     batch[status].push_back(scheme.columns[status].type->ConvertType(current_str));
                     current_str.clear();
                     ++status;
@@ -41,7 +42,10 @@ void ConvertToColumnar(const std::string& input_path, const std::string& scheme_
                         status = 0;
                         break;
                     }
-                } else if (std::isgraph(symbol)) {
+                } else {
+                    if (symbol == '"') {
+                        lock = !lock;
+                    }
                     current_str.push_back(symbol);
                 }
             }

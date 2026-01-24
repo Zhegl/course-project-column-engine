@@ -13,6 +13,7 @@ TEST(WriterReaderTest, Simple) {
     }
     
     column_engine::FileReader reader("test.columnar");
+    
     uint64_t val_read = reader.Read<uint64_t>();
 
     EXPECT_EQ(val, val_read);

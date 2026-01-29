@@ -32,6 +32,9 @@ void ConvertToColumnar(const std::string& input_path, const std::string& schema_
             bool lock = false;
             while (reader.Read(&symbol, 1)) {
                 if ((symbol == ',' || symbol == '\n') && !lock) {
+                    if (status >= schema.columns.size() - 1 && symbol == ',') {
+                        throw std::runtime_error("syntax error in " + input_path);
+                    }
                     batch[status].push_back(schema.columns[status].type->ConvertType(current_str));
                     current_str.clear();
                     ++status;
@@ -50,7 +53,7 @@ void ConvertToColumnar(const std::string& input_path, const std::string& schema_
                 }
             }
             if (reader.Eof()) {
-                if (status == schema.columns.size() - 1) {
+                if (status == schema.columns.size() - 1 && !current_str.empty()) {
                     batch[status].push_back(schema.columns[status].type->ConvertType(current_str));
                 } else if (status != 0) {
                     throw std::runtime_error("syntax error in " + input_path);

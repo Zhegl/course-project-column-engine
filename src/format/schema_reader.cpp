@@ -48,6 +48,9 @@ Schema ReadSchema(const std::string& path) {
         result.columns.emplace_back(name, GetType(current_str));
     }
 
+    if (result.columns.empty()) {
+        throw std::runtime_error("Schema is empty");
+    }
     return result;
 }
 

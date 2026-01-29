@@ -11,7 +11,7 @@ FileReader::FileReader(const std::string& path) : stream_(path, std::ios::binary
 }
 
 bool FileReader::Eof() {
-    return stream_.eof();
+    return stream_.peek() == std::istream::traits_type::eof();
 }
 
 bool FileReader::Read(char* data, size_t size) {

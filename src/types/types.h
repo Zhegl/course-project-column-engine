@@ -38,8 +38,7 @@ public:
     ~ColumnTypeInt64() override = default;
 };
 
-
-//enum class ColumnTypeName { String = 0, Int64 = 1 };
+// enum class ColumnTypeName { String = 0, Int64 = 1 };
 
 struct ColumnMetaData {
     std::string name;
@@ -51,7 +50,7 @@ struct BatchMetaData {
     size_t offset;
 };
 
-struct Scheme {
+struct Schema {
     std::vector<ColumnMetaData> columns;
 };
 

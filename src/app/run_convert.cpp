@@ -7,7 +7,7 @@
 namespace column_engine {
 
 void Usage() {
-    std::cout << "Usage: convert --input <file> --output <file> --scheme <file> [--batch <size>] "
+    std::cout << "Usage: convert --input <file> --output <file> --schema <file> [--batch <size>] "
                  "[--reversed]"
               << std::endl;
     exit(1);
@@ -17,7 +17,7 @@ void Run(int argc, char** argv) {
     size_t batch_size = 1000000;
     std::string input_path;
     std::string output_path;
-    std::string scheme_path;
+    std::string schema_path;
     bool reverse = false;
     size_t i = 0;
 
@@ -39,8 +39,8 @@ void Run(int argc, char** argv) {
             input_path = arg;
         } else if (arg_name == "--output") {
             output_path = arg;
-        } else if (arg_name == "--scheme") {
-            scheme_path = arg;
+        } else if (arg_name == "--schema") {
+            schema_path = arg;
         } else if (arg_name == "--batch") {
             batch_size = std::stoll(arg);
         } else {
@@ -49,9 +49,9 @@ void Run(int argc, char** argv) {
     }
 
     if (!reverse) {
-        ConvertToColumnar(input_path, scheme_path, output_path, batch_size);
+        ConvertToColumnar(input_path, schema_path, output_path, batch_size);
     } else {
-        ConvertToCsv(input_path, scheme_path, output_path);
+        ConvertToCsv(input_path, schema_path, output_path);
     }
 }
 

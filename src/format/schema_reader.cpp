@@ -1,4 +1,4 @@
-#include "scheme_reader.h"
+#include "schema_reader.h"
 #include <cctype>
 #include <stdexcept>
 #include <string>
@@ -10,8 +10,8 @@ bool IsSensible(char c) {
     return std::isgraph(c);
 }
 
-Scheme ReadScheme(const std::string& path) {
-    Scheme result;
+Schema ReadSchema(const std::string& path) {
+    Schema result;
     FileReader reader(path);
     char symbol;
 

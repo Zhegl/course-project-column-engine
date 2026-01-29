@@ -3,5 +3,5 @@
 #include <types/types.h>
 
 namespace column_engine {
-Scheme ReadScheme(const std::string& path);
+Schema ReadSchema(const std::string& path);
 };

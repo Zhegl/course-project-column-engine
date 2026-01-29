@@ -83,6 +83,51 @@ TEST(ConvertTest, SimpleConvert) {
     EXPECT_EQ(std::string("1,2\n3,4\n"), std::string(a));
 }
 
+TEST(ConvertTest, QuotedStringsWithSpaces) {
+    Write("scheme.csv",
+          "id,int64\n"
+          "name,string\n"
+          "comment,string\n");
+
+    Write("input.csv",
+          "1,\"hello world\",\"foo bar\"\n"
+          "2,bar,\"baz qux\"\n"
+          "3,\" spaced\n   text \",qux\n");
+
+    column_engine::ConvertToColumnar(
+        "input.csv",
+        "scheme.csv",
+        "out.col",
+        2
+    );
+
+    column_engine::FileReader r("out.col");
+    EXPECT_EQ(1, r.Read<int64_t>());
+    EXPECT_EQ(2, r.Read<int64_t>());
+    EXPECT_NE(3, r.Read<int64_t>());
+
+    column_engine::ConvertToCsv("out.col", "scheme_out.csv", "out.csv");
+
+    column_engine::Scheme old_scheme = column_engine::ReadScheme("scheme.csv");
+    column_engine::Scheme new_scheme = column_engine::ReadScheme("scheme_out.csv");
+    EXPECT_TRUE(Equal(old_scheme, new_scheme));
+
+    column_engine::FileReader reader2("out.csv");
+    char buf[256];
+    reader2.Read(buf, sizeof(buf) - 1);
+
+    EXPECT_EQ(
+        std::string(
+            "1,\"hello world\",\"foo bar\"\n"
+            "2,bar,\"baz qux\"\n"
+            "3,\" spaced\n   text \",qux\n"
+        ),
+        std::string(buf)
+    );
+}
+
+
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
 

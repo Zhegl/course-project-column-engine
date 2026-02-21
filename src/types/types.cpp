@@ -78,18 +78,43 @@ ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
     size_t result = 0;
+    int64_t min_val = std::get<int64_t>(data[0]);
+    int64_t max_val = std::get<int64_t>(data[0]);
     for (auto val : data) {
-        writer.Write(std::get<int64_t>(val));
-        result += sizeof(uint64_t);
+        min_val = std::min(min_val, std::get<int64_t>(val));
+        max_val = std::max(max_val, std::get<int64_t>(val));
+    }
+
+    uint64_t delta = (max_val - min_val);
+    size_t sz = 1;
+
+    if (delta != 0) {
+        sz = (64 - __builtin_clzll(delta) + 7) / 8;
+    }
+
+    writer.Write(min_val);
+    result += sizeof(int64_t);
+    writer.Write(sz);
+    result += sizeof(size_t);
+    for (auto val : data) {
+        uint64_t val_norm = std::get<int64_t>(val) - min_val;
+        writer.Write(reinterpret_cast<const char*>(&val_norm), sz);
+        result += sz;
     }
     return result;
 }
 
 std::vector<ColumnValue> ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
     std::vector<ColumnValue> result;
+    int64_t min_val = reader.Read<int64_t>();
+    size -= sizeof(int64_t);
+    size_t read_sz = reader.Read<size_t>();
+    size -= sizeof(size_t);
+    uint64_t val = 0;
     while (size) {
-        result.push_back(reader.Read<int64_t>());
-        size -= sizeof(uint64_t);
+        reader.Read(reinterpret_cast<char*>(&val), read_sz);
+        result.push_back(static_cast<int64_t>(val) + min_val);
+        size -= read_sz;
     }
     return result;
 }

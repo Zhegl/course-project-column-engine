@@ -77,45 +77,77 @@ ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
 }
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
+    const size_t block_size = 1000;
+    size_t blocks = (data.size() + block_size - 1) / block_size;
+
     size_t result = 0;
-    int64_t min_val = std::get<int64_t>(data[0]);
-    int64_t max_val = std::get<int64_t>(data[0]);
-    for (auto val : data) {
-        min_val = std::min(min_val, std::get<int64_t>(val));
-        max_val = std::max(max_val, std::get<int64_t>(val));
+    std::vector<int64_t> min_val(blocks);
+    std::vector<int64_t> max_val(blocks);
+    std::vector<size_t> sz(blocks, 1);
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        if (i % block_size == 0 || min_val[i / block_size] > std::get<int64_t>(data[i])) {
+            min_val[i / block_size] = std::get<int64_t>(data[i]);
+        }
+        if (i % block_size == 0 || max_val[i / block_size] < std::get<int64_t>(data[i])) {
+            max_val[i / block_size] = std::get<int64_t>(data[i]);
+        }
     }
 
-    uint64_t delta = (max_val - min_val);
-    size_t sz = 1;
-
-    if (delta != 0) {
-        sz = (64 - __builtin_clzll(delta) + 7) / 8;
-    }
-
-    writer.Write(min_val);
-    result += sizeof(int64_t);
-    writer.Write(sz);
+    size_t tba = sizeof(size_t) + (sizeof(size_t) * 2 + sizeof(int64_t)) * blocks;
+    writer.Write(blocks);
     result += sizeof(size_t);
-    for (auto val : data) {
-        uint64_t val_norm = std::get<int64_t>(val) - min_val;
-        writer.Write(reinterpret_cast<const char*>(&val_norm), sz);
-        result += sz;
+
+    for (size_t i = 0; i < blocks; ++i) {
+        uint64_t delta = static_cast<uint64_t>(max_val[i]) - static_cast<uint64_t>(min_val[i]);
+        if (delta != 0) {
+            sz[i] = (64 - __builtin_clzll(delta) + 7) / 8;
+        }
+        writer.Write(min_val[i]);
+        result += sizeof(int64_t);
+        writer.Write(sz[i]);
+        result += sizeof(size_t);
+        writer.Write(tba);
+        result += sizeof(size_t);
+        tba += sz[i] * block_size;
+    }
+    for (size_t i = 0; i < data.size(); ++i) {
+        uint64_t val_norm = static_cast<uint64_t>(std::get<int64_t>(data[i])) -
+                            static_cast<uint64_t>(min_val[i / block_size]);
+        writer.Write(reinterpret_cast<const char*>(&val_norm), sz[i / block_size]);
+        result += sz[i / block_size];
     }
     return result;
 }
 
 std::vector<ColumnValue> ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
     std::vector<ColumnValue> result;
-    int64_t min_val = reader.Read<int64_t>();
-    size -= sizeof(int64_t);
-    size_t read_sz = reader.Read<size_t>();
-    size -= sizeof(size_t);
-    uint64_t val = 0;
-    while (size) {
-        reader.Read(reinterpret_cast<char*>(&val), read_sz);
-        result.push_back(static_cast<int64_t>(val) + min_val);
-        size -= read_sz;
+    std::vector<int64_t> min_val;
+    std::vector<size_t> read_sz;
+    std::vector<size_t> block_offset;
+    size_t blocks = reader.Read<size_t>();
+
+    for (size_t i = 0; i < blocks; ++i) {
+        min_val.push_back(reader.Read<int64_t>());
+        read_sz.push_back(reader.Read<size_t>());
+        block_offset.push_back(reader.Read<size_t>());
     }
+    // LOG(INFO) << "size=" << size << " block_offset[0]=" << block_offset[0]
+    //      << " blocks=" << blocks << " read_sz=" << read_sz[0] << "\n";
+    size_t block = 0;
+    size_t i = block_offset[0];
+    uint64_t val = 0;
+    while (i < size) {
+        if (block + 1 != blocks && i >= block_offset[block + 1]) {
+            ++block;
+            val = 0;
+        }
+        reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
+        result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
+        i += read_sz[block];
+        // LOG(INFO) << "result.size()=" << result.size() << " i=" << i << "\n";
+    }
+
     return result;
 }
 

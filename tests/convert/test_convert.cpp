@@ -19,10 +19,14 @@ void Write(const std::string& path, const std::string& data) {
 }
 
 bool Equal(const column_engine::Schema& a, const column_engine::Schema& b) {
-    if (a.columns.size() != b.columns.size()) { return false; }
+    if (a.columns.size() != b.columns.size()) {
+        return false;
+    }
     for (size_t i = 0; i < a.columns.size(); ++i) {
         if (a.columns[i].name != b.columns[i].name ||
-            a.columns[i].type->GetTypeName() != b.columns[i].type->GetTypeName()) { return false; }
+            a.columns[i].type->GetTypeName() != b.columns[i].type->GetTypeName()) {
+            return false;
+        }
     }
     return true;
 }
@@ -31,7 +35,9 @@ std::string ReadFileToString(const std::string& path) {
     column_engine::FileReader reader(path);
     std::string result;
     char c;
-    while (reader.Read(&c, 1)) { result += c; }
+    while (reader.Read(&c, 1)) {
+        result += c;
+    }
     return result;
 }
 
@@ -42,7 +48,9 @@ std::string GenerateLargeCSV(int num_rows, int num_cols) {
     std::uniform_int_distribution<int64_t> dist(-1000000, 1000000);
     for (int row = 0; row < num_rows; ++row) {
         for (int col = 0; col < num_cols; ++col) {
-            if (col > 0) { csv += ","; }
+            if (col > 0) {
+                csv += ",";
+            }
             csv += std::to_string(dist(gen));
         }
         csv += "\n";
@@ -126,7 +134,8 @@ TEST(ConvertTest, NegativeNumbers) {
 
     auto [batch_meta, schema] = column_engine::GetMeta("out.col");
     column_engine::FileReader reader("out.col");
-    std::vector<column_engine::ColumnValue> batch = schema.columns[0].type->GetBatch(batch_meta[0].size, reader);
+    std::vector<column_engine::ColumnValue> batch =
+        schema.columns[0].type->GetBatch(batch_meta[0].size, reader);
 
     EXPECT_EQ(-123, std::get<int64_t>(batch[0]));
     EXPECT_EQ(-456, std::get<int64_t>(batch[1]));
@@ -139,7 +148,8 @@ TEST(ConvertTest, LargeNumbers) {
 
     auto [batch_meta, schema] = column_engine::GetMeta("out.col");
     column_engine::FileReader reader("out.col");
-    std::vector<column_engine::ColumnValue> batch = schema.columns[0].type->GetBatch(batch_meta[0].size, reader);
+    std::vector<column_engine::ColumnValue> batch =
+        schema.columns[0].type->GetBatch(batch_meta[0].size, reader);
 
     EXPECT_EQ(9223372036854775807LL, std::get<int64_t>(batch[0]));
     EXPECT_EQ(static_cast<int64_t>(-9223372036854775807LL - 1), std::get<int64_t>(batch[1]));
@@ -163,7 +173,9 @@ TEST(ConvertTest, SmallBatchSize) {
     while (batch < num_batches) {
         for (size_t col = 0; col < num_cols; ++col) {
             auto vals = schema.columns[col].type->GetBatch(batch_meta[batch].size, reader);
-            for (auto& v : vals) columns[col].push_back(v);
+            for (auto& v : vals) {
+                columns[col].push_back(v);
+            }
             ++batch;
         }
     }
@@ -179,7 +191,6 @@ TEST(ConvertTest, SmallBatchSize) {
     }
 }
 
-
 TEST(ConvertTest, MixedTypesLarge) {
     Write("schema.csv", "id,int64\nname,string\nvalue,int64\n");
     std::string csv;
@@ -188,17 +199,23 @@ TEST(ConvertTest, MixedTypesLarge) {
     }
     Write("input.csv", csv);
     column_engine::ConvertToColumnar("input.csv", "schema.csv", "out.col", 500);
-
     auto [batch_meta, schema] = column_engine::GetMeta("out.col");
     column_engine::FileReader reader("out.col");
-    size_t batch_index = 0;
 
-    auto batch_id = schema.columns[0].type->GetBatch(batch_meta[batch_index++].size, reader);
-    auto batch_value = schema.columns[2].type->GetBatch(batch_meta[batch_index++].size, reader);
+    auto batch_id0 = schema.columns[0].type->GetBatch(batch_meta[0].size, reader);
+    schema.columns[1].type->GetBatch(batch_meta[1].size, reader); // name_0
+    auto batch_value0 = schema.columns[2].type->GetBatch(batch_meta[2].size, reader);
+    auto batch_id1 = schema.columns[0].type->GetBatch(batch_meta[3].size, reader);
+    schema.columns[1].type->GetBatch(batch_meta[4].size, reader); // name_1
+    auto batch_value1 = schema.columns[2].type->GetBatch(batch_meta[5].size, reader);
 
-    for (int i = 0; i < 1000; ++i) {
-        EXPECT_EQ(i, std::get<int64_t>(batch_id[i]));
-        EXPECT_EQ(i * 2, std::get<int64_t>(batch_value[i]));
+    for (int i = 0; i < 500; ++i) {
+        EXPECT_EQ(i, std::get<int64_t>(batch_id0[i]));
+        EXPECT_EQ(i * 2, std::get<int64_t>(batch_value0[i]));
+    }
+    for (int i = 0; i < 500; ++i) {
+        EXPECT_EQ(i + 500, std::get<int64_t>(batch_id1[i]));
+        EXPECT_EQ((i + 500) * 2, std::get<int64_t>(batch_value1[i]));
     }
 }
 

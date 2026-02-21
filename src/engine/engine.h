@@ -27,6 +27,8 @@ public:
     Sink(std::shared_ptr<EngineBatch> batch);
     void Process(std::shared_ptr<EngineBatch> batch) override;
     void Finalize() override;
+private:
+    std::shared_ptr<EngineBatch> batch_;
 };
 
 class Filter : public Operator {

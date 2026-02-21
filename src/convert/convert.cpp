@@ -97,13 +97,21 @@ void PrintSchema(Schema schema, const std::string& path) {
     }
 }
 
+auto get_size = [](const ColumnData& col) {
+    return std::visit([](const auto& v) { return v.size(); }, col);
+};
+
+auto get_value = [](const ColumnData& col, size_t i) -> ColumnValue {
+    return std::visit([i](const auto& v) -> ColumnValue { return v[i]; }, col);
+};
+
 void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std::string& input_path,
                 const std::string& output_path) {
     FileReader reader(input_path);
     FileWriter writer(output_path);
     size_t batch = 0;
     while (batch < batch_meta.size()) {
-        std::vector<std::vector<ColumnValue>> columns(schema.columns.size());
+        std::vector<ColumnData> columns(schema.columns.size());
         for (size_t col = 0; col < schema.columns.size(); ++col) {
             if (batch >= batch_meta.size()) {
                 throw std::runtime_error("Batch metadata error");
@@ -111,12 +119,12 @@ void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std:
             columns[col] = schema.columns[col].type->GetBatch(batch_meta[batch].size, reader);
             ++batch;
         }
-        for (size_t i = 0; i < columns[0].size(); ++i) {
-            std::string data = ColumnTypeToString(columns[0][i]);
-            writer.Write(data.data(), data.size());
-            for (size_t j = 1; j < schema.columns.size(); ++j) {
-                writer.Write(',');
-                data = ColumnTypeToString(columns[j][i]);
+        for (size_t i = 0; i < get_size(columns[0]); ++i) {
+            for (size_t j = 0; j < schema.columns.size(); ++j) {
+                if (j > 0) {
+                    writer.Write(',');
+                }
+                std::string data = ColumnTypeToString(get_value(columns[j], i));
                 writer.Write(data.data(), data.size());
             }
             writer.Write('\n');

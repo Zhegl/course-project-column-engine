@@ -45,8 +45,8 @@ size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& wr
     return result;
 }
 
-std::vector<ColumnValue> ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
-    std::vector<ColumnValue> result;
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
+    std::vector<std::string> result;
     std::string add;
     char symbol;
     while (size) {
@@ -120,8 +120,8 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     return result;
 }
 
-std::vector<ColumnValue> ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
-    std::vector<ColumnValue> result;
+ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
+    std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<size_t> read_sz;
     std::vector<size_t> block_offset;

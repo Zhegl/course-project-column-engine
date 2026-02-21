@@ -1,5 +1,6 @@
 #include "file_reader.h"
 #include <cstddef>
+#include <cstdint>
 #include <stdexcept>
 
 namespace column_engine {
@@ -22,8 +23,12 @@ bool FileReader::Read(char* data, size_t size) {
     return true;
 }
 
-void FileReader::Jump(size_t offset) {
+void FileReader::Jump(uint64_t offset) {
     stream_.seekg(offset, std::ios::cur);
+}
+
+size_t FileReader::GetPos() {
+    return stream_.tellg();
 }
 
 size_t FileReader::Size() {

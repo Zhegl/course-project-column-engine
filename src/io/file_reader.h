@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <fstream>
 #include <string>
 
@@ -12,9 +13,11 @@ public:
 
     bool Eof();
 
-    void Jump(size_t offset);
+    void Jump(uint64_t offset);
 
     size_t Size();
+
+    size_t GetPos();
 
     template <typename T>
     T Read() {

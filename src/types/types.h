@@ -10,6 +10,7 @@
 namespace column_engine {
 
 using ColumnValue = std::variant<int64_t, std::string>;
+using ColumnData = std::variant<std::vector<int64_t>, std::vector<std::string>>;
 
 class ColumnTypeName {
 public:

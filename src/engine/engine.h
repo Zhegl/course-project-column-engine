@@ -1,5 +1,7 @@
+#pragma once
 #include <types/types.h>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -8,45 +10,70 @@ namespace column_engine {
 struct EngineBatch {
     std::vector<std::string> names;
     std::vector<ColumnData> columns;
-    std::vector<size_t> selection;
+    std::vector<uint16_t> selection;
 };
+
+size_t GetColumnIndex(const EngineBatch& batch, const std::string& name);
 
 class Operator {
 public:
-    virtual void Process(std::shared_ptr<EngineBatch> batch) = 0;
-    virtual void Finalize() = 0;
-    void SetNext(std::shared_ptr<Operator> next);
-    std::shared_ptr<Operator>  GetNext();
-
-    private:
-    std::shared_ptr<Operator> next_ = nullptr;
+    virtual std::optional<EngineBatch> GetNext() = 0;
+    virtual void Finalize() {}
+    virtual ~Operator() = default;
 };
 
-class Sink : public Operator {
+class Scan : public Operator {
 public:
-    Sink(std::shared_ptr<EngineBatch> batch);
-    void Process(std::shared_ptr<EngineBatch> batch) override;
-    void Finalize() override;
+    Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta);
+    std::optional<EngineBatch> GetNext() override;
+
 private:
-    std::shared_ptr<EngineBatch> batch_;
+    std::string path_;
+    Schema schema_;
+    std::vector<BatchMetaData> batch_meta_;
+    size_t current_row_group_ = 0;
+    size_t num_row_groups_ = 0;
 };
 
+template <typename Predicate>
 class Filter : public Operator {
 public:
-    void Process(std::shared_ptr<EngineBatch> batch) override;
-    void Finalize() override;
-};
+    Filter(std::shared_ptr<Operator> child, Predicate pred)
+        : child_(std::move(child)), pred_(std::move(pred)) {
+    }
 
+    std::optional<EngineBatch> GetNext() override {
+        while (auto batch = child_->GetNext()) {
+            std::vector<uint16_t> new_selection;
+            for (auto i : batch->selection) {
+                if (pred_(*batch, i)) {
+                    new_selection.emplace_back(i);
+                }
+            }
+            batch->selection = std::move(new_selection);
+            if (!batch->selection.empty()) {
+                return batch;
+            }
+        }
+        return std::nullopt;
+    }
+
+private:
+    std::shared_ptr<Operator> child_;
+    Predicate pred_;
+};
 
 class Engine {
 public:
     explicit Engine(const std::string& path);
-    std::shared_ptr<EngineBatch> Run(std::shared_ptr<Operator> root);  
+    EngineBatch Run(std::shared_ptr<Operator> root);
+    std::shared_ptr<Operator> MakeScan();
 
 private:
-    std::shared_ptr<EngineBatch> GetEngineBatch(size_t row_group);
     Schema schema_;
     std::string path_;
     std::vector<BatchMetaData> batch_meta_;
 };
+
 }  // namespace column_engine
+

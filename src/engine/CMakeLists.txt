@@ -1,5 +1,7 @@
 add_library(engine_lib
     engine.cpp
+    queries.cpp
+    api.cpp
 )
 
 target_include_directories(engine_lib

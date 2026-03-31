@@ -2,6 +2,7 @@
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
 #include <glog/logging.h>
+#include <memory>
 #include <stdexcept>
 
 namespace column_engine {
@@ -13,6 +14,11 @@ size_t GetColumnIndex(const EngineBatch& batch, const std::string& name) {
         }
     }
     throw std::runtime_error("Key error: " + name);
+}
+
+
+void Operator::SetChild(std::shared_ptr<Operator> child) {
+    child_ = child;
 }
 
 // Scan
@@ -75,13 +81,17 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root) {
                 if constexpr (std::is_same_v<std::decay_t<decltype(dst)>, std::decay_t<decltype(src)>>) {
                     for (auto i : batch->selection) {
                         dst.push_back(src[i]);
+                        result.selection.push_back(result.selection.size());
                     }
                 }
             }, result.columns[col], batch->columns[col]);
         }
     }
-    root->Finalize();
     return result;
+}
+
+ApiPipeline Engine::Api() {
+    return ApiPipeline(*this);
 }
 
 }  // namespace column_engine

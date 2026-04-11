@@ -26,11 +26,13 @@ class Scan : public Operator {
 public:
     Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta);
     std::optional<EngineBatch> GetNext() override;
+    void SetColumns(std::vector<size_t> columns);
 
 private:
     std::string path_;
     Schema schema_;
     std::vector<BatchMetaData> batch_meta_;
+    std::vector<size_t> columns_;
     size_t current_row_group_ = 0;
     size_t num_row_groups_ = 0;
 };
@@ -65,30 +67,16 @@ private:
 
 class Aggregate : public Operator {
 public:
-    Aggregate(std::shared_ptr<Operator> child, std::shared_ptr<Aggregator> agg)
+    Aggregate(std::shared_ptr<Operator> child, std::vector<std::shared_ptr<Aggregator>> aggs)
         : child_(std::move(child)),
-          agg_(std::move(agg)) {
+          aggs_(std::move(aggs)) {
     }
 
-    std::optional<EngineBatch> GetNext() override {
-        LOG(INFO) << "Agg";
-        bool is_empty = true;
-        while (auto batch = child_->GetNext()) {
-            is_empty &= batch->selection.empty();
-            for (auto i : batch->selection) {
-                agg_->Next(*batch, i);
-            }
-        }
-        if (is_empty) {
-            return std::nullopt;
-        }
-        auto result = agg_->GetResult();
-        return result;
-    }
+    std::optional<EngineBatch> GetNext() override;
 
 private:
     std::shared_ptr<Operator> child_;
-    std::shared_ptr<Aggregator> agg_;
+    std::vector<std::shared_ptr<Aggregator>> aggs_;
 };
 
 /*
@@ -122,7 +110,7 @@ class Engine {
 public:
     explicit Engine(const std::string& path);
     EngineBatch Run(std::shared_ptr<Operator> root);
-    std::shared_ptr<Operator> MakeScan();
+    std::shared_ptr<Scan> MakeScan();
     ApiPipeline Api();
 
 private:

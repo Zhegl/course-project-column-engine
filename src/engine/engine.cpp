@@ -3,7 +3,9 @@
 #include <io/file_reader.h>
 #include <glog/logging.h>
 #include <memory>
+#include <numeric>
 #include <stdexcept>
+#include <vector>
 
 namespace column_engine {
 
@@ -21,13 +23,16 @@ void Operator::SetChild(std::shared_ptr<Operator> child) {
     child_ = child;
 }
 
-// Scan
 
 Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
     : path_(path),
       schema_(std::move(schema)),
       batch_meta_(std::move(batch_meta)),
       num_row_groups_(batch_meta_.size() / schema_.columns.size()) {
+}
+
+void Scan::SetColumns(std::vector<size_t> columns) {
+    columns_ = columns;
 }
 
 std::optional<EngineBatch> Scan::GetNext() {
@@ -40,7 +45,7 @@ std::optional<EngineBatch> Scan::GetNext() {
 
     FileReader reader(path_);
     EngineBatch result;
-    for (size_t col = 0; col < cols; ++col) {
+    for (size_t col : columns_) {
         const auto& meta = batch_meta_[rg * cols + col];
         reader.Jump(meta.offset - reader.GetPos());
         result.names.push_back(schema_.columns[col].name);
@@ -55,6 +60,32 @@ std::optional<EngineBatch> Scan::GetNext() {
     return result;
 }
 
+// Aggregate
+
+std::optional<EngineBatch> Aggregate::GetNext() {
+    bool is_empty = true;
+    while (auto batch = child_->GetNext()) {
+        is_empty &= batch->selection.empty();
+        for (auto i : batch->selection) {
+            for (auto& agg : aggs_) {
+                agg->Next(*batch, i);
+            }
+        }
+    }
+    if (is_empty) {
+        return std::nullopt;
+    }
+    EngineBatch result;
+    for (auto& agg : aggs_) {
+        result.names.push_back(agg->GetName());
+        result.columns.push_back(agg->GetResult());
+    }
+    size_t n = std::visit([](const auto& vec) { return vec.size(); }, result.columns[0]);
+    result.selection.resize(n);
+    std::iota(result.selection.begin(), result.selection.end(), 0);
+    return result;
+}
+
 // Engine
 
 Engine::Engine(const std::string& path) : path_(path) {
@@ -65,7 +96,7 @@ Engine::Engine(const std::string& path) : path_(path) {
               << batch_meta_.size() / schema_.columns.size() << " row groups";
 }
 
-std::shared_ptr<Operator> Engine::MakeScan() {
+std::shared_ptr<Scan> Engine::MakeScan() {
     return std::make_shared<Scan>(path_, schema_, batch_meta_);
 }
 
@@ -81,10 +112,12 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root) {
                 if constexpr (std::is_same_v<std::decay_t<decltype(dst)>, std::decay_t<decltype(src)>>) {
                     for (auto i : batch->selection) {
                         dst.push_back(src[i]);
-                        result.selection.push_back(result.selection.size());
                     }
                 }
             }, result.columns[col], batch->columns[col]);
+        }
+        for (size_t k = 0; k < batch->selection.size(); ++k) {
+            result.selection.push_back(result.selection.size());
         }
     }
     return result;

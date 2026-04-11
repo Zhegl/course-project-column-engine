@@ -9,12 +9,43 @@ void CountAll::Next(EngineBatch& batch, uint16_t i) {
     ++count_;
 }
 
-std::optional<EngineBatch> CountAll::GetResult() {
-    EngineBatch result;
-    result.names = {"Count"};
-    result.selection = {0};
-    result.columns.emplace_back(std::vector<int64_t>{static_cast<int64_t>(count_)});
-    return result;
+ColumnData CountAll::GetResult() {
+    return std::vector<int64_t>{static_cast<int64_t>(count_)};
+}
+
+void IntSum::Next(EngineBatch& batch, uint16_t i) {
+    sum_ += std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
+}
+ColumnData IntSum::GetResult() {
+    return std::vector<int64_t>{sum_};
+}
+
+void IntMin::Next(EngineBatch& batch, uint16_t i) {
+    int64_t v = std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
+    if (v < min_) {
+        min_ = v;
+    }
+}
+ColumnData IntMin::GetResult() {
+    return std::vector<int64_t>{min_};
+}
+
+void IntMax::Next(EngineBatch& batch, uint16_t i) {
+    int64_t v = std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
+    if (v > max_) {
+        max_ = v;
+    }
+}
+ColumnData IntMax::GetResult() {
+    return std::vector<int64_t>{max_};
+}
+
+void IntAvg::Next(EngineBatch& batch, uint16_t i) {
+    sum_ += std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
+    ++count_;
+}
+ColumnData IntAvg::GetResult() {
+    return std::vector<int64_t>{static_cast<long>(count_ > 0 ? sum_ / count_ : 0)};
 }
 
 IntConstNE::IntConstNE(size_t id_a, int64_t const_b) : id_a_(id_a), const_b_(const_b) {

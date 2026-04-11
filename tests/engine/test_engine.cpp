@@ -5,8 +5,10 @@
 
 TEST(ClickBench1, MainTest) {
     column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 10);
+    
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Count("*").Run();
+    auto result = engine.Api().Where("AdvEngineID <> 0").Count("*").Run();
+    
     for (const auto& col : result) {
         for (const auto& val : col) {
            std::cout << val << " ";

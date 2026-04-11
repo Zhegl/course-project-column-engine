@@ -91,7 +91,7 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root) {
 }
 
 ApiPipeline Engine::Api() {
-    return ApiPipeline(*this);
+    return ApiPipeline(*this, schema_);
 }
 
 }  // namespace column_engine

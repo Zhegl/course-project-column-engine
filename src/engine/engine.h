@@ -7,6 +7,7 @@
 #include <api.h>
 #include <engine/batch.h>
 #include <glog/logging.h>
+#include <engine/queries.h>
 
 namespace column_engine {
 
@@ -34,10 +35,10 @@ private:
     size_t num_row_groups_ = 0;
 };
 
-template <typename Predicate>
+
 class Filter : public Operator {
 public:
-    Filter(std::shared_ptr<Operator> child, Predicate pred)
+    Filter(std::shared_ptr<Operator> child, std::shared_ptr<FilterPredicate> pred)
         : child_(std::move(child)), pred_(std::move(pred)) {
     }
 
@@ -45,7 +46,7 @@ public:
         while (auto batch = child_->GetNext()) {
             std::vector<uint16_t> new_selection;
             for (auto i : batch->selection) {
-                if (pred_(*batch, i)) {
+                if (pred_->Check(*batch, i)) {
                     new_selection.emplace_back(i);
                 }
             }
@@ -59,13 +60,12 @@ public:
 
 private:
     std::shared_ptr<Operator> child_;
-    Predicate pred_;
+    std::shared_ptr<FilterPredicate> pred_;
 };
 
-template <typename Agg>
 class Aggregate : public Operator {
 public:
-    Aggregate(std::shared_ptr<Operator> child, Agg agg)
+    Aggregate(std::shared_ptr<Operator> child, std::shared_ptr<Aggregator> agg)
         : child_(std::move(child)),
           agg_(std::move(agg)) {
     }
@@ -76,19 +76,19 @@ public:
         while (auto batch = child_->GetNext()) {
             is_empty &= batch->selection.empty();
             for (auto i : batch->selection) {
-                agg_.Next(*batch, i);
+                agg_->Next(*batch, i);
             }
         }
         if (is_empty) {
             return std::nullopt;
         }
-        auto result = agg_.GetResult();
+        auto result = agg_->GetResult();
         return result;
     }
 
 private:
     std::shared_ptr<Operator> child_;
-    Agg agg_;
+    std::shared_ptr<Aggregator> agg_;
 };
 
 /*

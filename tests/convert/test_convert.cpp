@@ -73,6 +73,48 @@ static const std::vector<int64_t>& AsInt64(const column_engine::ColumnData& col)
 static const std::vector<std::string>& AsString(const column_engine::ColumnData& col) {
     return std::get<std::vector<std::string>>(col);
 }
+*/
+TEST(ConvertTest, NegativeNumbers) {
+    Write("schema.csv", "a,int64\n");
+    Write("input.csv", "-123\n-456\n");
+    column_engine::ConvertToColumnar("input.csv", "schema.csv", "out.col");
+    column_engine::FileReader r("out.col");
+    EXPECT_EQ(-123, r.Read<int64_t>());
+    EXPECT_EQ(-456, r.Read<int64_t>());
+}
+
+TEST(ConvertTest, LargeNumbers) {
+    Write("schema.csv", "a,int64\n");
+    Write("input.csv", "9223372036854775807\n-9223372036854775808\n");
+    column_engine::ConvertToColumnar("input.csv", "schema.csv", "out.col");
+    column_engine::FileReader r("out.col");
+    EXPECT_EQ(9223372036854775807LL, r.Read<int64_t>());
+    EXPECT_EQ(static_cast<int64_t>(-9223372036854775807LL - 1), r.Read<int64_t>());
+}
+
+// TODO
+/*
+TEST(ConvertTest, OverflowNumbers) {
+    Write("schema.csv", "a,int64\n");
+    Write("input.csv", "9223372036854775808\n");  // Overflow для int64
+    EXPECT_THROW({
+        column_engine::ConvertToColumnar("input.csv", "schema.csv", "out.col");
+    }, std::overflow_error);
+}*/
+
+TEST(ConvertTest, EmptyInput) {
+    Write("schema.csv", "a,int64\n");
+    Write("input.csv", "");
+    column_engine::ConvertToColumnar("input.csv", "schema.csv", "out.col");
+    column_engine::FileReader r("out.col");
+}
+
+TEST(ConvertTest, LargeFileStress) {
+    const int num_rows = 10000;
+    const int num_cols = 5;
+    Write("schema.csv", GenerateSchema(num_cols, "int64"));
+    std::string large_csv = GenerateLargeCSV(num_rows, num_cols);
+    Write("input.csv", large_csv);
 
 // -------------------- Тесты --------------------
 TEST(SchemaReaderTest, Basic) {

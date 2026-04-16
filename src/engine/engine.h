@@ -8,6 +8,7 @@
 #include <engine/batch.h>
 #include <glog/logging.h>
 #include <engine/queries.h>
+#include <engine/parser.h>
 
 namespace column_engine {
 
@@ -44,21 +45,7 @@ public:
         : child_(std::move(child)), pred_(std::move(pred)) {
     }
 
-    std::optional<EngineBatch> GetNext() override {
-        while (auto batch = child_->GetNext()) {
-            std::vector<uint16_t> new_selection;
-            for (auto i : batch->selection) {
-                if (pred_->Check(*batch, i)) {
-                    new_selection.emplace_back(i);
-                }
-            }
-            batch->selection = std::move(new_selection);
-            if (!batch->selection.empty()) {
-                return batch;
-            }
-        }
-        return std::nullopt;
-    }
+    std::optional<EngineBatch> GetNext() override;
 
 private:
     std::shared_ptr<Operator> child_;
@@ -67,16 +54,16 @@ private:
 
 class Aggregate : public Operator {
 public:
-    Aggregate(std::shared_ptr<Operator> child, std::vector<std::shared_ptr<Aggregator>> aggs)
+    Aggregate(std::shared_ptr<Operator> child, std::vector<AggFactory> factories)
         : child_(std::move(child)),
-          aggs_(std::move(aggs)) {
+          factories_(std::move(factories)) {
     }
 
     std::optional<EngineBatch> GetNext() override;
 
 private:
     std::shared_ptr<Operator> child_;
-    std::vector<std::shared_ptr<Aggregator>> aggs_;
+    std::vector<AggFactory> factories_;
 };
 
 /*

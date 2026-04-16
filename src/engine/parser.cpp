@@ -69,8 +69,8 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     throw std::runtime_error("Unsupported WHERE: " + arg);
 }
 
-std::vector<std::shared_ptr<Aggregator>> QueryParser::ParseAggregate(const std::string& arg) {
-    std::vector<std::shared_ptr<Aggregator>> aggs;
+std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
+    std::vector<AggFactory> factories;
     size_t i = 0;
 
     while (i < arg.size()) {
@@ -93,25 +93,25 @@ std::vector<std::shared_ptr<Aggregator>> QueryParser::ParseAggregate(const std::
         ++i;
 
         if (func == "COUNT" && col == "*") {
-            aggs.push_back(std::make_shared<CountAll>());
+            factories.push_back([]() { return std::make_shared<CountAll>(); });
             continue;
         }
 
         size_t id = GetColumnId(col);
         if (func == "SUM") {
-            aggs.push_back(std::make_shared<IntSum>(id, col));
+            factories.push_back([id, col]() { return std::make_shared<IntSum>(id, col); });
         } else if (func == "MIN") {
-            aggs.push_back(std::make_shared<IntMin>(id, col));
+            factories.push_back([id, col]() { return std::make_shared<IntMin>(id, col); });
         } else if (func == "MAX") {
-            aggs.push_back(std::make_shared<IntMax>(id, col));
+            factories.push_back([id, col]() { return std::make_shared<IntMax>(id, col); });
         } else if (func == "AVG") {
-            aggs.push_back(std::make_shared<IntAvg>(id, col));
+            factories.push_back([id, col]() { return std::make_shared<IntAvg>(id, col); });
         } else {
             throw std::runtime_error("Unknown aggregate function: " + func);
         }
     }
 
-    return aggs;
+    return factories;
 }
 
 }  // namespace column_engine

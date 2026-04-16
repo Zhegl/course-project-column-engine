@@ -14,7 +14,7 @@ ApiPipeline::ApiPipeline(Engine& engine, const Schema& schema)
 
 ApiPipeline ApiPipeline::Count(std::string arg) {
     if (arg == "*") {
-        root_ = std::make_shared<class Aggregate>(root_, std::vector<std::shared_ptr<Aggregator>>{std::make_shared<CountAll>()});
+        root_ = std::make_shared<class Aggregate>(root_, std::vector<AggFactory>{[]() { return std::make_shared<CountAll>(); }});
         return *this;
     }
     throw std::runtime_error("Wrong arg for .Count: " + arg);

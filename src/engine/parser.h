@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <map>
 #include <memory>
 #include <string>
@@ -8,6 +9,8 @@
 
 namespace column_engine {
 
+using AggFactory = std::function<std::shared_ptr<Aggregator>()>;
+
 class QueryParser {
 public:
     explicit QueryParser(const Schema& schema);
@@ -15,7 +18,7 @@ public:
     size_t GetColumnId(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
-    std::vector<std::shared_ptr<Aggregator>> ParseAggregate(const std::string& arg) ;
+    std::vector<AggFactory> ParseAggregate(const std::string& arg);
 
 private:
     const Schema& schema_;

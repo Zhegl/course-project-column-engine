@@ -60,14 +60,36 @@ std::optional<EngineBatch> Scan::GetNext() {
     return result;
 }
 
+// Filter
+
+std::optional<EngineBatch> Filter::GetNext() {
+    while (auto batch = child_->GetNext()) {
+        std::vector<uint16_t> new_selection;
+        for (auto i : batch->selection) {
+            if (pred_->Check(*batch, i)) {
+                new_selection.emplace_back(i);
+            }
+        }
+        batch->selection = std::move(new_selection);
+        if (!batch->selection.empty()) {
+            return batch;
+        }
+    }
+    return std::nullopt;
+}
+
 // Aggregate
 
 std::optional<EngineBatch> Aggregate::GetNext() {
+    std::vector<std::shared_ptr<Aggregator>> aggs;
+    for (auto& f : factories_) {
+        aggs.push_back(f());
+    }
     bool is_empty = true;
     while (auto batch = child_->GetNext()) {
         is_empty &= batch->selection.empty();
         for (auto i : batch->selection) {
-            for (auto& agg : aggs_) {
+            for (auto& agg : aggs) {
                 agg->Next(*batch, i);
             }
         }
@@ -76,7 +98,7 @@ std::optional<EngineBatch> Aggregate::GetNext() {
         return std::nullopt;
     }
     EngineBatch result;
-    for (auto& agg : aggs_) {
+    for (auto& agg : aggs) {
         result.names.push_back(agg->GetName());
         result.columns.push_back(agg->GetResult());
     }

@@ -6,6 +6,7 @@
 #include <vector>
 #include <api.h>
 #include <engine/batch.h>
+#include <engine/hashmap.h>
 #include <glog/logging.h>
 #include <engine/queries.h>
 #include <engine/parser.h>
@@ -54,8 +55,13 @@ private:
 
 class Aggregate : public Operator {
 public:
-    Aggregate(std::shared_ptr<Operator> child, std::vector<AggFactory> factories)
+    Aggregate(std::shared_ptr<Operator> child,
+              std::vector<size_t> group_columns,
+              std::vector<std::string> group_names,
+              std::vector<AggFactory> factories)
         : child_(std::move(child)),
+          group_columns_(std::move(group_columns)),
+          group_names_(std::move(group_names)),
           factories_(std::move(factories)) {
     }
 
@@ -63,6 +69,8 @@ public:
 
 private:
     std::shared_ptr<Operator> child_;
+    std::vector<size_t> group_columns_;
+    std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
 };
 
@@ -96,7 +104,7 @@ class ApiPipeline;
 class Engine {
 public:
     explicit Engine(const std::string& path);
-    EngineBatch Run(std::shared_ptr<Operator> root);
+    EngineBatch Run(std::shared_ptr<Operator> root, const std::vector<std::string>& selected_columns = {});
     std::shared_ptr<Scan> MakeScan();
     ApiPipeline Api();
 

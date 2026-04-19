@@ -15,7 +15,8 @@ class QueryParser {
 public:
     explicit QueryParser(const Schema& schema);
 
-    size_t GetColumnId(const std::string& name);
+    size_t GetColumnId(const std::string& name, bool real = false);
+    bool EnsureColumnForSelect(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
     std::vector<AggFactory> ParseAggregate(const std::string& arg);

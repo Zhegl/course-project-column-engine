@@ -2,12 +2,36 @@
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
 #include <glog/logging.h>
+#include <cstdint>
 #include <memory>
 #include <numeric>
 #include <stdexcept>
+#include <type_traits>
 #include <vector>
 
 namespace column_engine {
+
+namespace {
+
+ColumnValue GetColumnValue(const ColumnData& column, uint16_t i) {
+    return std::visit([&](const auto& data) -> ColumnValue { return data[i]; }, column);
+}
+
+ColumnData MakeColumnData(const ColumnValue& value) {
+    return std::visit([](const auto& v) -> ColumnData {
+        using T = std::decay_t<decltype(v)>;
+        return std::vector<T>{};
+    }, value);
+}
+
+void AppendColumnValue(ColumnData& column, const ColumnValue& value) {
+    std::visit([&](auto& data) {
+        using T = typename std::decay_t<decltype(data)>::value_type;
+        data.push_back(std::get<T>(value));
+    }, column);
+}
+
+}  // namespace
 
 size_t GetColumnIndex(const EngineBatch& batch, const std::string& name) {
     for (size_t i = 0; i < batch.names.size(); ++i) {
@@ -81,14 +105,23 @@ std::optional<EngineBatch> Filter::GetNext() {
 // Aggregate
 
 std::optional<EngineBatch> Aggregate::GetNext() {
-    std::vector<std::shared_ptr<Aggregator>> aggs;
-    for (auto& f : factories_) {
-        aggs.push_back(f());
-    }
+    HashMap<std::vector<std::shared_ptr<Aggregator>>> groups;
     bool is_empty = true;
     while (auto batch = child_->GetNext()) {
         is_empty &= batch->selection.empty();
         for (auto i : batch->selection) {
+            GroupKey key;
+            key.values.reserve(group_columns_.size());
+            for (size_t col : group_columns_) {
+                key.values.push_back(GetColumnValue(batch->columns[col], i));
+            }
+
+            auto& aggs = groups[key];
+            if (aggs.empty()) {
+                for (auto& f : factories_) {
+                    aggs.push_back(f());
+                }
+            }
             for (auto& agg : aggs) {
                 agg->Next(*batch, i);
             }
@@ -97,12 +130,42 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     if (is_empty) {
         return std::nullopt;
     }
-    EngineBatch result;
-    for (auto& agg : aggs) {
-        result.names.push_back(agg->GetName());
-        result.columns.push_back(agg->GetResult());
+
+    if (groups.empty()) {
+        groups[GroupKey{}];
     }
-    size_t n = std::visit([](const auto& vec) { return vec.size(); }, result.columns[0]);
+
+    EngineBatch result;
+    for (const auto& name : group_names_) {
+        result.names.push_back(name);
+    }
+    if (!groups.empty()) {
+        const auto& first_key = groups.begin()->first;
+        for (const auto& value : first_key.values) {
+            result.columns.push_back(MakeColumnData(value));
+        }
+        for (const auto& agg : groups.begin()->second) {
+            result.names.push_back(agg->GetName());
+            result.columns.push_back(agg->GetResult());
+            std::visit([](auto& data) { data.clear(); }, result.columns.back());
+        }
+    }
+
+    for (const auto& [key, aggs] : groups) {
+        for (size_t i = 0; i < key.values.size(); ++i) {
+            AppendColumnValue(result.columns[i], key.values[i]);
+        }
+        for (size_t i = 0; i < aggs.size(); ++i) {
+            AppendColumnValue(result.columns[group_names_.size() + i], GetColumnValue(aggs[i]->GetResult(), 0));
+        }
+    }
+
+    size_t n = 0;
+    if (!result.columns.empty()) {
+        n = std::visit([](const auto& vec) { return vec.size(); }, result.columns[0]);
+    } else if (!groups.empty()) {
+        n = groups.size();
+    }
     result.selection.resize(n);
     std::iota(result.selection.begin(), result.selection.end(), 0);
     return result;
@@ -122,12 +185,16 @@ std::shared_ptr<Scan> Engine::MakeScan() {
     return std::make_shared<Scan>(path_, schema_, batch_meta_);
 }
 
-EngineBatch Engine::Run(std::shared_ptr<Operator> root) {
+EngineBatch Engine::Run(std::shared_ptr<Operator> root, const std::vector<std::string>& selected_columns) {
     EngineBatch result;
     while (auto batch = root->GetNext()) {
         if (result.names.empty()) {
             result.names = batch->names;
-            result.columns.resize(batch->columns.size());
+            for (const auto& col : batch->columns) {
+                result.columns.push_back(std::visit([](const auto& v) -> ColumnData {
+                    return std::decay_t<decltype(v)>{};
+                }, col));
+            }
         }
         for (size_t col = 0; col < batch->columns.size(); ++col) {
             std::visit([&](auto& dst, const auto& src) {
@@ -142,7 +209,23 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root) {
             result.selection.push_back(result.selection.size());
         }
     }
-    return result;
+    if (selected_columns.empty()) {
+        return result;
+    }
+
+    EngineBatch selected_result;
+    if (result.names.empty()) {
+        selected_result.names = selected_columns;
+        return selected_result;
+    }
+
+    selected_result.selection = result.selection;
+    for (const auto& name : selected_columns) {
+        size_t col = GetColumnIndex(result, name);
+        selected_result.names.push_back(result.names[col]);
+        selected_result.columns.push_back(result.columns[col]);
+    }
+    return selected_result;
 }
 
 ApiPipeline Engine::Api() {

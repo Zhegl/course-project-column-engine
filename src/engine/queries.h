@@ -79,6 +79,32 @@ private:
     size_t count_{0};
 };
 
+class StrMin : public Aggregator {
+public:
+    explicit StrMin(size_t col_idx, std::string name)
+        : col_idx_(col_idx), name_(std::move(name)) {}
+    void Next(EngineBatch& batch, uint16_t i) override;
+    ColumnData GetResult() override;
+    std::string GetName() override { return "MIN(" + name_ + ")"; }
+private:
+    size_t col_idx_;
+    std::string name_;
+    std::optional<std::string> min_;
+};
+
+class StrMax : public Aggregator {
+public:
+    explicit StrMax(size_t col_idx, std::string name)
+        : col_idx_(col_idx), name_(std::move(name)) {}
+    void Next(EngineBatch& batch, uint16_t i) override;
+    ColumnData GetResult() override;
+    std::string GetName() override { return "MAX(" + name_ + ")"; }
+private:
+    size_t col_idx_;
+    std::string name_;
+    std::optional<std::string> max_;
+};
+
 class FilterPredicate {
 public:
     virtual bool Check(EngineBatch& batch, uint16_t i) = 0;
@@ -88,6 +114,16 @@ public:
 class IntConstNE : public FilterPredicate {
 public:
     IntConstNE(size_t id_a, int64_t const_b);
+    bool Check(EngineBatch& batch, uint16_t i);
+
+private:
+    size_t id_a_;
+    int64_t const_b_;
+};
+
+class IntConstEQ : public FilterPredicate {
+public:
+    IntConstEQ(size_t id_a, int64_t const_b);
     bool Check(EngineBatch& batch, uint16_t i);
 
 private:

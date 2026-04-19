@@ -9,17 +9,36 @@ namespace column_engine {
 QueryParser::QueryParser(const Schema& schema) : schema_(schema) {
 }
 
-size_t QueryParser::GetColumnId(const std::string& name) {
+size_t QueryParser::GetColumnId(const std::string& name, bool real) {
     if (column_idx_.find(name) != column_idx_.end()) {
+        if (real) {
+            return column_idx_[name].second;
+        }
         return column_idx_[name].first;
     }
     for (size_t id = 0; id < schema_.columns.size(); ++id) {
         if (name == schema_.columns[id].name) {
             column_idx_[name] = {column_idx_.size(), id};
+            if (real) {
+                return column_idx_[name].second;
+            }
             return column_idx_[name].first;
         }
     }
     throw std::runtime_error("Column not found: " + name);
+}
+
+bool QueryParser::EnsureColumnForSelect(const std::string& name) {
+    if (column_idx_.find(name) != column_idx_.end()) {
+        return true;
+    }
+    for (size_t id = 0; id < schema_.columns.size(); ++id) {
+        if (name == schema_.columns[id].name) {
+            column_idx_[name] = {column_idx_.size(), id};
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<size_t> QueryParser::GetColumnsForScan() {
@@ -61,6 +80,9 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     }
 
     if (schema_.columns[id].type->GetTypeName() == "int64") {
+        if (op == "=") {
+            return std::make_shared<IntConstEQ>(id, std::stoll(val));
+        }
         if (op == "<>") {
             return std::make_shared<IntConstNE>(id, std::stoll(val));
         }
@@ -97,13 +119,23 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
             continue;
         }
 
-        size_t id = GetColumnId(col);
+        size_t real_id = GetColumnId(col, true);
+        size_t id = GetColumnId(col, false);
+        bool is_str = schema_.columns[real_id].type->GetTypeName() == "string";
         if (func == "SUM") {
             factories.push_back([id, col]() { return std::make_shared<IntSum>(id, col); });
         } else if (func == "MIN") {
-            factories.push_back([id, col]() { return std::make_shared<IntMin>(id, col); });
+            if (is_str) {
+                factories.push_back([id, col]() { return std::make_shared<StrMin>(id, col); });
+            } else {
+                factories.push_back([id, col]() { return std::make_shared<IntMin>(id, col); });
+            }
         } else if (func == "MAX") {
-            factories.push_back([id, col]() { return std::make_shared<IntMax>(id, col); });
+            if (is_str) {
+                factories.push_back([id, col]() { return std::make_shared<StrMax>(id, col); });
+            } else {
+                factories.push_back([id, col]() { return std::make_shared<IntMax>(id, col); });
+            }
         } else if (func == "AVG") {
             factories.push_back([id, col]() { return std::make_shared<IntAvg>(id, col); });
         } else {

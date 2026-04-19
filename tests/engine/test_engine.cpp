@@ -13,21 +13,24 @@ protected:
 
 TEST_F(ClickBench, Q0) {
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Aggregate("COUNT(*)").Run();
+    auto result = engine.Api().Aggregate("COUNT(*)").Select("COUNT(*)").Run();
     std::cout << result[1][0] << "\n";
     EXPECT_EQ(result[1][0], "999977");
 }
 
 TEST_F(ClickBench, Q1) {
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Where("AdvEngineID <> 0").Aggregate("COUNT(*)").Run();
+    auto result = engine.Api().Where("AdvEngineID <> 0").Aggregate("COUNT(*)").Select("COUNT(*)").Run();
     std::cout << result[1][0] << "\n";
     EXPECT_EQ(result[1][0], "14174");
 }
 
 TEST_F(ClickBench, Q2) {
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Aggregate("SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth)").Run();
+    auto result = engine.Api()
+                      .Aggregate("SUM(AdvEngineID), COUNT(*), AVG(ResolutionWidth)")
+                      .Select("SUM(AdvEngineID)", "COUNT(*)", "AVG(ResolutionWidth)")
+                      .Run();
     std::cout << result[1][0] << " " << result[1][1] << " " << result[1][2] << "\n";
     EXPECT_EQ(result[1][0], "80778");
     EXPECT_EQ(result[1][1], "999977");
@@ -36,17 +39,57 @@ TEST_F(ClickBench, Q2) {
 
 TEST_F(ClickBench, Q3) {
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Aggregate("AVG(UserID)").Run();
+    auto result = engine.Api().Aggregate("AVG(UserID)").Select("AVG(UserID)").Run();
     std::cout << result[1][0] << "\n";
     EXPECT_EQ(result[1][0], "15567353102073");
 }
 
-
-TEST_F(ClickBench, Q) {
+TEST_F(ClickBench, Q4) {
     column_engine::Engine engine("col.col");
-    auto result = engine.Api().Aggregate("AVG(UserID)").Run();
+    auto result = engine.Api()
+                      .GroupBy("UserID")
+                      .Aggregate("COUNT(*)")
+                      .Select("COUNT(*)")
+                      .Run();
     std::cout << result[1][0] << "\n";
-    EXPECT_EQ(result[1][0], "15567353102073");
+    ASSERT_EQ(result[0].size(), 1);
+    EXPECT_EQ(result[0][0], "COUNT(*)");
+    EXPECT_EQ(result[1][0], "79842");
+}
+
+TEST_F(ClickBench, Q5) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .GroupBy("SearchPhrase")
+                      .Aggregate("COUNT(*)")
+                      .Select("COUNT(*)")
+                      .Run();
+    std::cout << result[1][0] << "\n";
+    ASSERT_EQ(result[0].size(), 1);
+    EXPECT_EQ(result[0][0], "COUNT(*)");
+    EXPECT_EQ(result[1][0], "18316");
+}
+
+TEST_F(ClickBench, Q6) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Aggregate("MIN(EventDate), MAX(EventDate)")
+                      .Select("MIN(EventDate)", "MAX(EventDate)")
+                      .Run();
+    std::cout << result[1][0] << "\t" << result[1][1] << "\n";
+    EXPECT_EQ(result[1][0], "2013-07-15");
+    EXPECT_EQ(result[1][1], "2013-07-15");
+}
+
+TEST_F(ClickBench, Q19) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("UserID = 435090932899640449")
+                      .Select("UserID")
+                      .Run();
+    ASSERT_EQ(result.size(), 1);
+    ASSERT_EQ(result[0].size(), 1);
+    EXPECT_EQ(result[0][0], "UserID");
 }
 
 int main(int argc, char** argv) {

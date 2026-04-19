@@ -48,8 +48,9 @@ void ConvertToColumnar(const std::string& input_path, const std::string& schema_
                 } else {
                     if (symbol == '"') {
                         lock = !lock;
+                    } else {
+                        current_str.push_back(symbol);
                     }
-                    current_str.push_back(symbol);
                 }
             }
             if (reader.Eof()) {

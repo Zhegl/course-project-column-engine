@@ -1,4 +1,5 @@
 #pragma once
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
@@ -24,6 +25,8 @@ public:
     ApiPipeline Count(std::string arg);
     ApiPipeline Where(std::string arg);
     ApiPipeline Aggregate(std::string arg);
+    ApiPipeline Limit(size_t arg);
+    ApiPipeline OrderBy(std::string arg);
     template <typename... Args>
     ApiPipeline GroupBy(Args... args) {
         return GroupByAggregateImpl({std::string(args)...}, "");

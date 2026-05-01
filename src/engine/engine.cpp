@@ -2,12 +2,15 @@
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
 #include <glog/logging.h>
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <numeric>
+#include <optional>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
+#include "batch.h"
 
 namespace column_engine {
 
@@ -18,17 +21,53 @@ ColumnValue GetColumnValue(const ColumnData& column, uint16_t i) {
 }
 
 ColumnData MakeColumnData(const ColumnValue& value) {
-    return std::visit([](const auto& v) -> ColumnData {
-        using T = std::decay_t<decltype(v)>;
-        return std::vector<T>{};
-    }, value);
+    return std::visit(
+        [](const auto& v) -> ColumnData {
+            using T = std::decay_t<decltype(v)>;
+            return std::vector<T>{};
+        },
+        value);
 }
 
 void AppendColumnValue(ColumnData& column, const ColumnValue& value) {
-    std::visit([&](auto& data) {
-        using T = typename std::decay_t<decltype(data)>::value_type;
-        data.push_back(std::get<T>(value));
-    }, column);
+    std::visit(
+        [&](auto& data) {
+            using T = typename std::decay_t<decltype(data)>::value_type;
+            data.push_back(std::get<T>(value));
+        },
+        column);
+}
+
+std::optional<EngineBatch> GetAllBatches(std::shared_ptr<Operator> op, size_t limit = 0) {
+    EngineBatch result;
+    while (auto batch = op->GetNext()) {
+        if (result.names.empty()) {
+            result.names = batch->names;
+            for (const auto& col : batch->columns) {
+                result.columns.push_back(std::visit(
+                    [](const auto& v) -> ColumnData { return std::decay_t<decltype(v)>{}; }, col));
+            }
+        }
+        for (size_t col = 0; col < batch->columns.size(); ++col) {
+            std::visit(
+                [&](auto& dst, const auto& src) {
+                    if constexpr (std::is_same_v<std::decay_t<decltype(dst)>,
+                                                 std::decay_t<decltype(src)>>) {
+                        for (auto i : batch->selection) {
+                            if (limit != 0 && dst.size() >= limit) {
+                                break;
+                            }
+                            dst.push_back(src[i]);
+                        }
+                    }
+                },
+                result.columns[col], batch->columns[col]);
+        }
+        for (size_t k = 0; k < batch->selection.size(); ++k) {
+            result.selection.push_back(result.selection.size());
+        }
+    }
+    return result;
 }
 
 }  // namespace
@@ -42,11 +81,9 @@ size_t GetColumnIndex(const EngineBatch& batch, const std::string& name) {
     throw std::runtime_error("Key error: " + name);
 }
 
-
 void Operator::SetChild(std::shared_ptr<Operator> child) {
     child_ = child;
 }
-
 
 Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
     : path_(path),
@@ -156,7 +193,8 @@ std::optional<EngineBatch> Aggregate::GetNext() {
             AppendColumnValue(result.columns[i], key.values[i]);
         }
         for (size_t i = 0; i < aggs.size(); ++i) {
-            AppendColumnValue(result.columns[group_names_.size() + i], GetColumnValue(aggs[i]->GetResult(), 0));
+            AppendColumnValue(result.columns[group_names_.size() + i],
+                              GetColumnValue(aggs[i]->GetResult(), 0));
         }
     }
 
@@ -169,6 +207,28 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     result.selection.resize(n);
     std::iota(result.selection.begin(), result.selection.end(), 0);
     return result;
+}
+
+
+std::optional<EngineBatch> LimitOp::GetNext() {
+    return GetAllBatches(child_, limit_);
+}
+
+std::optional<EngineBatch> Sort::GetNext() {
+    if (auto result = GetAllBatches(child_)) {
+        size_t col_id = GetColumnIndex(result.value(), col_);
+        const ColumnData& col = result->columns[col_id];
+        std::sort(result->selection.begin(), result->selection.end(), [&](uint16_t lhs, uint16_t rhs) {
+                return std::visit([&](const auto& values) {
+                    return values[lhs] < values[rhs];
+                }, col);
+            });
+        if (reversed_) {
+            std::reverse(result->selection.begin(), result->selection.end());
+        }
+        return result;
+    }
+    return std::nullopt;
 }
 
 // Engine
@@ -185,30 +245,12 @@ std::shared_ptr<Scan> Engine::MakeScan() {
     return std::make_shared<Scan>(path_, schema_, batch_meta_);
 }
 
-EngineBatch Engine::Run(std::shared_ptr<Operator> root, const std::vector<std::string>& selected_columns) {
-    EngineBatch result;
-    while (auto batch = root->GetNext()) {
-        if (result.names.empty()) {
-            result.names = batch->names;
-            for (const auto& col : batch->columns) {
-                result.columns.push_back(std::visit([](const auto& v) -> ColumnData {
-                    return std::decay_t<decltype(v)>{};
-                }, col));
-            }
-        }
-        for (size_t col = 0; col < batch->columns.size(); ++col) {
-            std::visit([&](auto& dst, const auto& src) {
-                if constexpr (std::is_same_v<std::decay_t<decltype(dst)>, std::decay_t<decltype(src)>>) {
-                    for (auto i : batch->selection) {
-                        dst.push_back(src[i]);
-                    }
-                }
-            }, result.columns[col], batch->columns[col]);
-        }
-        for (size_t k = 0; k < batch->selection.size(); ++k) {
-            result.selection.push_back(result.selection.size());
-        }
-    }
+
+
+EngineBatch Engine::Run(std::shared_ptr<Operator> root,
+                        const std::vector<std::string>& selected_columns) {
+    EngineBatch result = GetAllBatches(root).value();
+
     if (selected_columns.empty()) {
         return result;
     }

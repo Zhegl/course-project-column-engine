@@ -20,6 +20,7 @@ public:
     virtual std::optional<EngineBatch> GetNext() = 0;
     virtual ~Operator() = default;
     void SetChild(std::shared_ptr<Operator> child);
+
 private:
     std::shared_ptr<Operator> child_;
 };
@@ -39,7 +40,6 @@ private:
     size_t num_row_groups_ = 0;
 };
 
-
 class Filter : public Operator {
 public:
     Filter(std::shared_ptr<Operator> child, std::shared_ptr<FilterPredicate> pred)
@@ -55,10 +55,8 @@ private:
 
 class Aggregate : public Operator {
 public:
-    Aggregate(std::shared_ptr<Operator> child,
-              std::vector<size_t> group_columns,
-              std::vector<std::string> group_names,
-              std::vector<AggFactory> factories)
+    Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
+              std::vector<std::string> group_names, std::vector<AggFactory> factories)
         : child_(std::move(child)),
           group_columns_(std::move(group_columns)),
           group_names_(std::move(group_names)),
@@ -74,6 +72,31 @@ private:
     std::vector<AggFactory> factories_;
 };
 
+class LimitOp : public Operator {
+public:
+    LimitOp(std::shared_ptr<Operator> child, size_t limit)
+        : child_(std::move(child)), limit_(limit) {
+    }
+    std::optional<EngineBatch> GetNext() override;
+
+private:
+    std::shared_ptr<Operator> child_;
+    size_t limit_;
+};
+
+class Sort : public Operator {
+public:
+    Sort(std::shared_ptr<Operator> child, std::string col, bool reversed)
+        : child_(std::move(child)), col_(col), reversed_(reversed) {
+    }
+    std::optional<EngineBatch> GetNext() override;
+
+private:
+    std::shared_ptr<Operator> child_;
+    std::string col_;
+    bool reversed_;
+};
+
 /*
 template <typename Comparator>
 class OrderBy : public Operator {
@@ -84,7 +107,7 @@ public:
     }
 
     std::optional<EngineBatch> GetNext() override {
-        
+
         while (auto batch = child_->GetNext()) {
             for (auto i : batch->selection) {
                 agg_.Next(*batch, i);
@@ -104,7 +127,8 @@ class ApiPipeline;
 class Engine {
 public:
     explicit Engine(const std::string& path);
-    EngineBatch Run(std::shared_ptr<Operator> root, const std::vector<std::string>& selected_columns = {});
+    EngineBatch Run(std::shared_ptr<Operator> root,
+                    const std::vector<std::string>& selected_columns = {});
     std::shared_ptr<Scan> MakeScan();
     ApiPipeline Api();
 

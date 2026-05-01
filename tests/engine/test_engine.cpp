@@ -7,7 +7,7 @@
 class ClickBench : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
-        column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 10000);
+        column_engine::ConvertToColumnar("hits_mini.csv", "hits_schema.csv", "col.col", 10000);
     }
 };
 
@@ -79,6 +79,37 @@ TEST_F(ClickBench, Q6) {
     std::cout << result[1][0] << "\t" << result[1][1] << "\n";
     EXPECT_EQ(result[1][0], "2013-07-15");
     EXPECT_EQ(result[1][1], "2013-07-15");
+}
+
+
+TEST_F(ClickBench, Q7) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("AdvEngineID <> 0")
+                      .GroupByAggregate("AdvEngineID", "COUNT(*)")
+                      .OrderBy("COUNT(*) DESC")
+                      .Select("AdvEngineID", "COUNT(*)")
+                      .Run();
+    
+    ASSERT_EQ(result.size(), 5);
+    ASSERT_EQ(result[0].size(), 2);
+
+    EXPECT_EQ(result[0][0], "2");
+    EXPECT_EQ(result[0][1], "9543");
+
+    EXPECT_EQ(result[1][0], "13");
+    EXPECT_EQ(result[1][1], "4592");
+
+    EXPECT_EQ(result[2][0], "52");
+    EXPECT_EQ(result[2][1], "34");
+
+    EXPECT_EQ(result[3][0], "50");
+    EXPECT_EQ(result[3][1], "4");
+
+    EXPECT_EQ(result[4][0], "28");
+    EXPECT_EQ(result[4][1], "1");
+
+
 }
 
 TEST_F(ClickBench, Q19) {

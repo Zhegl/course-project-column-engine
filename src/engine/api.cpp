@@ -1,5 +1,6 @@
 #include "api.h"
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include "engine.h"
 #include "queries.h"
@@ -32,6 +33,30 @@ ApiPipeline ApiPipeline::Where(std::string arg) {
 ApiPipeline ApiPipeline::Aggregate(std::string arg) {
     return GroupByAggregateImpl({}, std::move(arg));
 }
+
+ApiPipeline ApiPipeline::OrderBy(std::string arg) {
+    if (arg.size() < 4) {
+        throw std::runtime_error("wrong args for OrderBy");
+    }
+
+
+    size_t start = 4;
+    bool reversed = false;
+
+    if (arg[arg.size() - 3] != 'A') { // TODO better parser
+        start = 5;
+        reversed = true;
+    } 
+
+    root_ = std::make_shared<Sort>(root_, arg.substr(0, arg.size() - start), reversed);
+    return *this;
+}
+
+ApiPipeline ApiPipeline::Limit(size_t arg) {
+    root_ = std::make_shared<LimitOp>(root_, arg);
+    return *this;
+}
+
 
 ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates) {
     std::vector<size_t> group_column_ids;

@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "api.h"
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
 #include <glog/logging.h>
@@ -7,6 +8,7 @@
 #include <memory>
 #include <numeric>
 #include <optional>
+#include <queue>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -16,7 +18,20 @@ namespace column_engine {
 
 namespace {
 
-ColumnValue GetColumnValue(const ColumnData& column, uint16_t i) {
+bool LessColumnValue(const ColumnValue& lhs, const ColumnValue& rhs) {
+    return std::visit(
+        [](const auto& left, const auto& right) -> bool {
+            using L = std::decay_t<decltype(left)>;
+            using R = std::decay_t<decltype(right)>;
+            if constexpr (std::is_same_v<L, R>) {
+                return left < right;
+            }
+            throw std::runtime_error("Column type mismatch in comparison");
+        },
+        lhs, rhs);
+}
+
+ColumnValue GetColumnValue(const ColumnData& column, RowIndex i) {
     return std::visit([&](const auto& data) -> ColumnValue { return data[i]; }, column);
 }
 
@@ -118,7 +133,7 @@ std::optional<EngineBatch> Scan::GetNext() {
 
     size_t num_rows = std::visit([](const auto& c) { return c.size(); }, result.columns[0]);
     result.selection.resize(num_rows);
-    for (uint16_t i = 0; i < static_cast<uint16_t>(num_rows); ++i) {
+    for (RowIndex i = 0; i < num_rows; ++i) {
         result.selection[i] = i;
     }
     return result;
@@ -128,7 +143,7 @@ std::optional<EngineBatch> Scan::GetNext() {
 
 std::optional<EngineBatch> Filter::GetNext() {
     while (auto batch = child_->GetNext()) {
-        std::vector<uint16_t> new_selection;
+        std::vector<RowIndex> new_selection;
         for (auto i : batch->selection) {
             if (pred_->Check(*batch, i)) {
                 new_selection.emplace_back(i);
@@ -143,7 +158,6 @@ std::optional<EngineBatch> Filter::GetNext() {
 }
 
 // Aggregate
-
 std::optional<EngineBatch> Aggregate::GetNext() {
     HashMap<std::vector<std::shared_ptr<Aggregator>>> groups;
     bool is_empty = true;
@@ -221,7 +235,7 @@ std::optional<EngineBatch> Sort::GetNext() {
         size_t col_id = GetColumnIndex(result.value(), col_);
         const ColumnData& col = result->columns[col_id];
         std::sort(result->selection.begin(), result->selection.end(),
-                  [&](uint16_t lhs, uint16_t rhs) {
+                  [&](RowIndex lhs, RowIndex rhs) {
                       return std::visit(
                           [&](const auto& values) { return values[lhs] < values[rhs]; }, col);
                   });
@@ -243,6 +257,101 @@ std::optional<EngineBatch> As::GetNext() {
         return batch;
     }
     return std::nullopt;
+}
+
+
+std::optional<EngineBatch> TopK::GetNext() {
+    if (limit_ == 0) {
+        return GetAllBatches(child_, 0);
+    }
+
+    struct TopKRow {
+        std::vector<ColumnValue> values;
+        size_t order;
+    };
+
+    size_t sort_col_idx = 0;
+
+    auto is_better = [&](const TopKRow& lhs, const TopKRow& rhs) {
+        const ColumnValue& left = lhs.values[sort_col_idx];
+        const ColumnValue& right = rhs.values[sort_col_idx];
+        if (LessColumnValue(left, right)) {
+            return !reversed_;
+        }
+        if (LessColumnValue(right, left)) {
+            return reversed_;
+        }
+        return lhs.order < rhs.order;
+    };
+
+
+    std::vector<TopKRow> heap_storage;
+    size_t next_order = 0;
+    bool initialized = false;
+    std::vector<std::string> names;
+    std::vector<ColumnData> schema_columns;
+
+    auto heap_cmp = [&](size_t lhs, size_t rhs) {
+        return is_better(heap_storage[lhs], heap_storage[rhs]);
+    };
+    std::priority_queue<size_t, std::vector<size_t>, decltype(heap_cmp)> heap(heap_cmp);
+
+    while (auto batch = child_->GetNext()) {
+        if (!initialized) {
+            names = batch->names;
+            schema_columns = batch->columns;
+            sort_col_idx = GetColumnIndex(*batch, col_);
+            initialized = true;
+        }
+        for (auto i : batch->selection) {
+            TopKRow row;
+            row.order = next_order++;
+            row.values.reserve(batch->columns.size());
+            for (const auto& column : batch->columns) {
+                row.values.push_back(GetColumnValue(column, i));
+            }
+
+            heap_storage.push_back(std::move(row));
+            size_t row_idx = heap_storage.size() - 1;
+            if (heap.size() < limit_) {
+                heap.push(row_idx);
+                continue;
+            }
+            if (is_better(heap_storage[row_idx], heap_storage[heap.top()])) {
+                heap.pop();
+                heap.push(row_idx);
+            }
+        }
+    }
+
+    if (!initialized) {
+        return std::nullopt;
+    }
+
+    std::vector<size_t> best_rows;
+    best_rows.reserve(heap.size());
+    while (!heap.empty()) {
+        best_rows.push_back(heap.top());
+        heap.pop();
+    }
+
+    std::sort(best_rows.begin(), best_rows.end(), [&](size_t lhs, size_t rhs) {
+        return is_better(heap_storage[lhs], heap_storage[rhs]);
+    });
+
+    EngineBatch result;
+    result.names = std::move(names);
+    for (const auto& col : schema_columns) {
+        result.columns.push_back(std::visit(
+            [](const auto& v) -> ColumnData { return std::decay_t<decltype(v)>{}; }, col));
+    }
+    for (size_t row_idx : best_rows) {
+        for (size_t col = 0; col < heap_storage[row_idx].values.size(); ++col) {
+            AppendColumnValue(result.columns[col], heap_storage[row_idx].values[col]);
+        }
+        result.selection.push_back(result.selection.size());
+    }
+    return result;
 }
 
 // Engine

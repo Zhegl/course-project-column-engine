@@ -4,7 +4,6 @@
 #include <optional>
 #include <string>
 #include <vector>
-#include <api.h>
 #include <engine/batch.h>
 #include <engine/hashmap.h>
 #include <glog/logging.h>
@@ -107,6 +106,20 @@ private:
     std::shared_ptr<Operator> child_;
     std::string from_;
     std::string to_;
+};
+
+
+class TopK : public Operator {
+public:
+    TopK(std::shared_ptr<Operator> child, std::string col, bool reversed, size_t limit)
+        : child_(std::move(child)), col_(col), reversed_(reversed), limit_(limit) {
+    }
+    std::optional<EngineBatch> GetNext() override;
+private:
+    std::shared_ptr<Operator> child_;
+    std::string col_;
+    bool reversed_;
+    size_t limit_;
 };
 
 /*

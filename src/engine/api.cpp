@@ -48,12 +48,18 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
         reversed = true;
     } 
 
-    root_ = std::make_shared<Sort>(root_, arg.substr(0, arg.size() - start), reversed);
+    pending_order_col_ = arg.substr(0, arg.size() - start);
+    pending_order_reversed_ = reversed;
     return *this;
 }
 
 ApiPipeline ApiPipeline::Limit(size_t arg) {
-    root_ = std::make_shared<LimitOp>(root_, arg);
+    if (pending_order_col_) {
+        root_ = std::make_shared<TopK>(root_, *pending_order_col_, pending_order_reversed_, arg);
+        pending_order_col_.reset();
+    } else {
+        root_ = std::make_shared<LimitOp>(root_, arg);
+    }
     return *this;
 }
 
@@ -79,7 +85,15 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
 void ApiPipeline::Add(std::shared_ptr<Operator> op) {
 }
 
+void ApiPipeline::MaterializePendingOrder() {
+    if (pending_order_col_) {
+        root_ = std::make_shared<Sort>(root_, *pending_order_col_, pending_order_reversed_);
+        pending_order_col_.reset();
+    }
+}
+
 QueryResult ApiPipeline::Run() {
+    MaterializePendingOrder();
     scanner_->SetColumns(parser_.GetColumnsForScan());
     EngineBatch batch = engine_.Run(root_, selected_columns_);
     QueryResult result;

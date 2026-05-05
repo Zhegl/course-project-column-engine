@@ -5,9 +5,11 @@
 #include <types/types.h>
 
 namespace column_engine {
+using RowIndex = uint16_t;
+
 struct EngineBatch {
     std::vector<std::string> names;
     std::vector<ColumnData> columns;
-    std::vector<uint16_t> selection;
+    std::vector<RowIndex> selection;
 };
 }  // namespace column_engine

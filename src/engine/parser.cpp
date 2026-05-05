@@ -2,9 +2,21 @@
 #include <algorithm>
 #include <cstddef>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 namespace column_engine {
+
+namespace {
+
+std::string UnquoteStringLiteral(std::string value) {
+    if (value.size() >= 2 && value.front() == '\'' && value.back() == '\'') {
+        return value.substr(1, value.size() - 2);
+    }
+    return value;
+}
+
+}  // namespace
 
 QueryParser::QueryParser(const Schema& schema) : schema_(schema) {
 }
@@ -67,6 +79,7 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     ++i;
 
     size_t id = GetColumnId(name);
+    size_t real_id = GetColumnId(name, true);
 
     std::string op;
     while (i < arg.size() && arg[i] != ' ') {
@@ -79,12 +92,20 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
         val.push_back(arg[i++]);
     }
 
-    if (schema_.columns[id].type->GetTypeName() == "int64") {
+    if (schema_.columns[real_id].type->GetTypeName() == "int64") {
         if (op == "=") {
             return std::make_shared<IntConstEQ>(id, std::stoll(val));
         }
         if (op == "<>") {
             return std::make_shared<IntConstNE>(id, std::stoll(val));
+        }
+    } else if (schema_.columns[real_id].type->GetTypeName() == "string") {
+        std::string str_val = UnquoteStringLiteral(val);
+        if (op == "=") {
+            return std::make_shared<StrConstEQ>(id, std::move(str_val));
+        }
+        if (op == "<>") {
+            return std::make_shared<StrConstNE>(id, std::move(str_val));
         }
     }
 
@@ -94,6 +115,7 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
 std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
     std::vector<AggFactory> factories;
     size_t i = 0;
+    constexpr const char* kDistinctPrefix = "DISTINCT ";
 
     while (i < arg.size()) {
         while (i < arg.size() && (arg[i] == ' ' || arg[i] == ',')) {
@@ -119,25 +141,41 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
             continue;
         }
 
-        size_t real_id = GetColumnId(col, true);
-        size_t id = GetColumnId(col, false);
+        bool is_distinct = col.starts_with(kDistinctPrefix);
+        std::string raw_col = is_distinct ? col.substr(std::char_traits<char>::length(kDistinctPrefix))
+                                          : col;
+
+        size_t real_id = GetColumnId(raw_col, true);
+        size_t id = GetColumnId(raw_col, false);
         bool is_str = schema_.columns[real_id].type->GetTypeName() == "string";
-        if (func == "SUM") {
-            factories.push_back([id, col]() { return std::make_shared<IntSum>(id, col); });
+        if (func == "COUNT" && is_distinct) {
+            if (is_str) {
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<StrCountDistinct>(id, raw_col); });
+            } else {
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<IntCountDistinct>(id, raw_col); });
+            }
+        } else if (func == "SUM") {
+            factories.push_back([id, raw_col]() { return std::make_shared<IntSum>(id, raw_col); });
         } else if (func == "MIN") {
             if (is_str) {
-                factories.push_back([id, col]() { return std::make_shared<StrMin>(id, col); });
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<StrMin>(id, raw_col); });
             } else {
-                factories.push_back([id, col]() { return std::make_shared<IntMin>(id, col); });
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<IntMin>(id, raw_col); });
             }
         } else if (func == "MAX") {
             if (is_str) {
-                factories.push_back([id, col]() { return std::make_shared<StrMax>(id, col); });
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<StrMax>(id, raw_col); });
             } else {
-                factories.push_back([id, col]() { return std::make_shared<IntMax>(id, col); });
+                factories.push_back(
+                    [id, raw_col]() { return std::make_shared<IntMax>(id, raw_col); });
             }
         } else if (func == "AVG") {
-            factories.push_back([id, col]() { return std::make_shared<IntAvg>(id, col); });
+            factories.push_back([id, raw_col]() { return std::make_shared<IntAvg>(id, raw_col); });
         } else {
             throw std::runtime_error("Unknown aggregate function: " + func);
         }

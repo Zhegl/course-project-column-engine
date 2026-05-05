@@ -1,10 +1,10 @@
 #pragma once
 #include <cstddef>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 #include "types/types.h"
-#include <engine/engine.h>
 #include <engine/queries.h>
 #include <engine/batch.h>
 #include <engine/parser.h>
@@ -29,10 +29,6 @@ public:
     ApiPipeline OrderBy(std::string arg);
     ApiPipeline Rename(std::string from, std::string to);
     template <typename... Args>
-    ApiPipeline GroupBy(Args... args) {
-        return GroupByAggregateImpl({std::string(args)...}, "");
-    }
-    template <typename... Args>
     ApiPipeline GroupByAggregate(Args... args) {
         std::vector<std::string> all_args{std::string(args)...};
         std::string aggregates = all_args.back();
@@ -51,11 +47,14 @@ public:
 
 private:
     ApiPipeline GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates);
+    void MaterializePendingOrder();
     void Add(std::shared_ptr<Operator> op);
     Engine& engine_;
     QueryParser parser_;
     std::vector<std::string> selected_columns_;
     std::shared_ptr<Operator> root_;
     std::shared_ptr<Scan> scanner_;
+    std::optional<std::string> pending_order_col_;
+    bool pending_order_reversed_ = false;
 };
 }  // namespace column_engine

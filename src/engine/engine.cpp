@@ -63,9 +63,12 @@ std::optional<EngineBatch> GetAllBatches(std::shared_ptr<Operator> op, size_t li
                 },
                 result.columns[col], batch->columns[col]);
         }
-        for (size_t k = 0; k < batch->selection.size(); ++k) {
+        for (size_t k = 0; k < batch->selection.size() && (!limit || result.selection.size() < limit); ++k) {
             result.selection.push_back(result.selection.size());
         }
+    }
+    if (result.columns.empty()) {
+        return std::nullopt;
     }
     return result;
 }
@@ -209,7 +212,6 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     return result;
 }
 
-
 std::optional<EngineBatch> LimitOp::GetNext() {
     return GetAllBatches(child_, limit_);
 }
@@ -218,15 +220,27 @@ std::optional<EngineBatch> Sort::GetNext() {
     if (auto result = GetAllBatches(child_)) {
         size_t col_id = GetColumnIndex(result.value(), col_);
         const ColumnData& col = result->columns[col_id];
-        std::sort(result->selection.begin(), result->selection.end(), [&](uint16_t lhs, uint16_t rhs) {
-                return std::visit([&](const auto& values) {
-                    return values[lhs] < values[rhs];
-                }, col);
-            });
+        std::sort(result->selection.begin(), result->selection.end(),
+                  [&](uint16_t lhs, uint16_t rhs) {
+                      return std::visit(
+                          [&](const auto& values) { return values[lhs] < values[rhs]; }, col);
+                  });
         if (reversed_) {
             std::reverse(result->selection.begin(), result->selection.end());
         }
         return result;
+    }
+    return std::nullopt;
+}
+
+std::optional<EngineBatch> As::GetNext() {
+    if (auto batch = child_->GetNext()) {
+        for (auto& col : batch->names) {
+            if (col == from_) {
+                col = to_;
+            }
+        }
+        return batch;
     }
     return std::nullopt;
 }
@@ -245,29 +259,32 @@ std::shared_ptr<Scan> Engine::MakeScan() {
     return std::make_shared<Scan>(path_, schema_, batch_meta_);
 }
 
-
-
 EngineBatch Engine::Run(std::shared_ptr<Operator> root,
                         const std::vector<std::string>& selected_columns) {
-    EngineBatch result = GetAllBatches(root).value();
 
-    if (selected_columns.empty()) {
-        return result;
-    }
+    if (auto probe = GetAllBatches(root)) {
+        EngineBatch result = probe.value();
+        if (selected_columns.empty()) {
+            return result;
+        }
 
-    EngineBatch selected_result;
-    if (result.names.empty()) {
-        selected_result.names = selected_columns;
+        EngineBatch selected_result;
+        if (result.names.empty()) {
+            selected_result.names = selected_columns;
+            return selected_result;
+        }
+
+        selected_result.selection = result.selection;
+        for (const auto& name : selected_columns) {
+            size_t col = GetColumnIndex(result, name);
+            selected_result.names.push_back(result.names[col]);
+            selected_result.columns.push_back(result.columns[col]);
+        }
         return selected_result;
     }
-
-    selected_result.selection = result.selection;
-    for (const auto& name : selected_columns) {
-        size_t col = GetColumnIndex(result, name);
-        selected_result.names.push_back(result.names[col]);
-        selected_result.columns.push_back(result.columns[col]);
-    }
-    return selected_result;
+    EngineBatch result;
+    result.names = selected_columns;
+    return result;
 }
 
 ApiPipeline Engine::Api() {

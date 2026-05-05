@@ -27,6 +27,7 @@ public:
     ApiPipeline Aggregate(std::string arg);
     ApiPipeline Limit(size_t arg);
     ApiPipeline OrderBy(std::string arg);
+    ApiPipeline Rename(std::string from, std::string to);
     template <typename... Args>
     ApiPipeline GroupBy(Args... args) {
         return GroupByAggregateImpl({std::string(args)...}, "");

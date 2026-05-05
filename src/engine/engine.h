@@ -97,6 +97,18 @@ private:
     bool reversed_;
 };
 
+class As : public Operator {
+public:
+    As(std::shared_ptr<Operator> child, std::string from, std::string to)
+        : child_(std::move(child)), from_(from), to_(to) {
+    }
+    std::optional<EngineBatch> GetNext() override;
+private:
+    std::shared_ptr<Operator> child_;
+    std::string from_;
+    std::string to_;
+};
+
 /*
 template <typename Comparator>
 class OrderBy : public Operator {

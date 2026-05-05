@@ -57,6 +57,10 @@ ApiPipeline ApiPipeline::Limit(size_t arg) {
     return *this;
 }
 
+ApiPipeline ApiPipeline::Rename(std::string from, std::string to) {
+    root_ = std::make_shared<As>(root_, from, to);
+    return *this;
+}
 
 ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates) {
     std::vector<size_t> group_column_ids;

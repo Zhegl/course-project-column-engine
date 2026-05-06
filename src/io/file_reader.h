@@ -13,7 +13,7 @@ public:
 
     bool Eof();
 
-    void Jump(uint64_t offset);
+    void Jump(int64_t offset);
 
     size_t Size();
 

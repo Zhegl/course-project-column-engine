@@ -4,6 +4,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include "file_reader.h"
 #include <engine/batch.h>
 #include <engine/hashmap.h>
 #include <glog/logging.h>
@@ -18,10 +19,6 @@ class Operator {
 public:
     virtual std::optional<EngineBatch> GetNext() = 0;
     virtual ~Operator() = default;
-    void SetChild(std::shared_ptr<Operator> child);
-
-private:
-    std::shared_ptr<Operator> child_;
 };
 
 class Scan : public Operator {
@@ -31,7 +28,7 @@ public:
     void SetColumns(std::vector<size_t> columns);
 
 private:
-    std::string path_;
+    FileReader reader_;
     Schema schema_;
     std::vector<BatchMetaData> batch_meta_;
     std::vector<size_t> columns_;
@@ -65,10 +62,14 @@ public:
     std::optional<EngineBatch> GetNext() override;
 
 private:
+    void Run();
+    bool ready_{false};
     std::shared_ptr<Operator> child_;
     std::vector<size_t> group_columns_;
     std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
+    HashMap<std::vector<std::shared_ptr<Aggregator>>> groups_;
+    HashMap<std::vector<std::shared_ptr<Aggregator>>>::iterator cur_;
 };
 
 class LimitOp : public Operator {

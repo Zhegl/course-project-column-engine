@@ -39,7 +39,7 @@ public:
     ApiPipeline Select(Args... args) {
         selected_columns_ = {std::string(args)...};
         for (const auto& name : selected_columns_) {
-            parser_.EnsureColumnForSelect(name);
+            parser_.GetColumnId(name);
         }
         return *this;
     }
@@ -48,7 +48,6 @@ public:
 private:
     ApiPipeline GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates);
     void MaterializePendingOrder();
-    void Add(std::shared_ptr<Operator> op);
     Engine& engine_;
     QueryParser parser_;
     std::vector<std::string> selected_columns_;

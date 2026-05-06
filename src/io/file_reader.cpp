@@ -23,7 +23,7 @@ bool FileReader::Read(char* data, size_t size) {
     return true;
 }
 
-void FileReader::Jump(uint64_t offset) {
+void FileReader::Jump(int64_t offset) {
     stream_.seekg(offset, std::ios::cur);
 }
 

@@ -14,16 +14,17 @@ using AggFactory = std::function<std::shared_ptr<Aggregator>()>;
 class QueryParser {
 public:
     explicit QueryParser(const Schema& schema);
-
-    size_t GetColumnId(const std::string& name, bool real = false);
-    bool EnsureColumnForSelect(const std::string& name);
+    void SetSchema(Schema schema);
+    Schema GetSchema();
+    size_t GetColumnId(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
     std::vector<AggFactory> ParseAggregate(const std::string& arg);
 
 private:
     const Schema& schema_;
-    std::map<std::string, std::pair<size_t, size_t>> column_idx_; // (real idx, out idx)
+    Schema cur_schema_;
+    std::vector<size_t> columns_for_scan_;
 };
 
 }  // namespace column_engine

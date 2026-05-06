@@ -1,9 +1,11 @@
 #include "api.h"
+#include "column_utils.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include "engine.h"
 #include "queries.h"
+#include "types/types.h"
 
 namespace column_engine {
 
@@ -64,6 +66,9 @@ ApiPipeline ApiPipeline::Limit(size_t arg) {
 }
 
 ApiPipeline ApiPipeline::Rename(std::string from, std::string to) {
+    Schema new_schema = parser_.GetSchema();
+    new_schema.columns[parser_.GetColumnId(from)].name = to;
+    parser_.SetSchema(new_schema);
     root_ = std::make_shared<As>(root_, from, to);
     return *this;
 }
@@ -74,15 +79,24 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
     for (const auto& name : group_columns) {
         group_column_ids.push_back(parser_.GetColumnId(name));
     }
+    Schema old_schema = parser_.GetSchema();
+    Schema new_schema;
+    for (size_t id : group_column_ids) {
+        new_schema.columns.push_back(old_schema.columns[id]);
+    }
+
+    parser_.SetSchema(new_schema);
+
     root_ = std::make_shared<class Aggregate>(
         root_,
         std::move(group_column_ids),
         std::move(group_columns),
         parser_.ParseAggregate(aggregates));
-    return *this;
-}
 
-void ApiPipeline::Add(std::shared_ptr<Operator> op) {
+
+
+
+    return *this;
 }
 
 void ApiPipeline::MaterializePendingOrder() {
@@ -101,14 +115,7 @@ QueryResult ApiPipeline::Run() {
     for (auto i : batch.selection) {
         result.emplace_back();
         for (size_t col = 0; col < result[0].size(); ++col) {
-            std::visit([&](const auto& vec) {
-                using T = std::decay_t<decltype(vec[0])>;
-                if constexpr (std::is_same_v<T, int64_t>) {
-                    result[result.size() - 1].emplace_back(std::to_string(vec[i]));
-                } else {
-                    result[result.size() - 1].emplace_back(vec[i]);
-                }
-            }, batch.columns[col]);
+            result.back().emplace_back(ColumnValueToStringAt(batch.columns[col], i));
         }
     }
     return result;

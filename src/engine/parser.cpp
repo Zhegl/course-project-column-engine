@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include "types/types.h"
 
 namespace column_engine {
 
@@ -21,52 +22,36 @@ std::string UnquoteStringLiteral(std::string value) {
 QueryParser::QueryParser(const Schema& schema) : schema_(schema) {
 }
 
-size_t QueryParser::GetColumnId(const std::string& name, bool real) {
-    if (column_idx_.find(name) != column_idx_.end()) {
-        if (real) {
-            return column_idx_[name].second;
+size_t QueryParser::GetColumnId(const std::string& name) {
+    for (size_t id = 0; id < cur_schema_.columns.size(); ++id) {
+        if (name == cur_schema_.columns[id].name) {
+            return id;
         }
-        return column_idx_[name].first;
     }
-    for (size_t id = 0; id < schema_.columns.size(); ++id) {
-        if (name == schema_.columns[id].name) {
-            column_idx_[name] = {column_idx_.size(), id};
-            if (real) {
-                return column_idx_[name].second;
-            }
-            return column_idx_[name].first;
+    // not in cur_schema_ yet — look up in the source schema and register for scan
+    for (size_t real_id = 0; real_id < schema_.columns.size(); ++real_id) {
+        if (name == schema_.columns[real_id].name) {
+            columns_for_scan_.push_back(real_id);
+            cur_schema_.columns.push_back(schema_.columns[real_id]);
+            return cur_schema_.columns.size() - 1;
         }
     }
     throw std::runtime_error("Column not found: " + name);
 }
 
-bool QueryParser::EnsureColumnForSelect(const std::string& name) {
-    if (column_idx_.find(name) != column_idx_.end()) {
-        return true;
-    }
-    for (size_t id = 0; id < schema_.columns.size(); ++id) {
-        if (name == schema_.columns[id].name) {
-            column_idx_[name] = {column_idx_.size(), id};
-            return true;
-        }
-    }
-    return false;
+void QueryParser::SetSchema(Schema schema) {
+    cur_schema_ = schema;
+}
+
+Schema QueryParser::GetSchema() {
+    return cur_schema_;
 }
 
 std::vector<size_t> QueryParser::GetColumnsForScan() {
-    std::vector<std::pair<size_t, size_t>> tmp;
-    for (auto [key, val] : column_idx_) {
-        tmp.emplace_back(val);
+    if (columns_for_scan_.empty()) {
+        return {0};
     }
-    std::sort(tmp.begin(), tmp.end());
-    std::vector<size_t> result;
-    for (auto [_, val] : tmp) {
-        result.emplace_back(val);
-    }
-    if (result.empty()) {
-        result.emplace_back(0);
-    }
-    return result;
+    return columns_for_scan_;
 }
 
 std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg) {
@@ -79,7 +64,6 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     ++i;
 
     size_t id = GetColumnId(name);
-    size_t real_id = GetColumnId(name, true);
 
     std::string op;
     while (i < arg.size() && arg[i] != ' ') {
@@ -92,14 +76,15 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
         val.push_back(arg[i++]);
     }
 
-    if (schema_.columns[real_id].type->GetTypeName() == "int64") {
+    const std::string& type_name = cur_schema_.columns[id].type->GetTypeName();
+    if (type_name == "int64") {
         if (op == "=") {
             return std::make_shared<IntConstEQ>(id, std::stoll(val));
         }
         if (op == "<>") {
             return std::make_shared<IntConstNE>(id, std::stoll(val));
         }
-    } else if (schema_.columns[real_id].type->GetTypeName() == "string") {
+    } else if (type_name == "string") {
         std::string str_val = UnquoteStringLiteral(val);
         if (op == "=") {
             return std::make_shared<StrConstEQ>(id, std::move(str_val));
@@ -114,6 +99,7 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
 
 std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
     std::vector<AggFactory> factories;
+    std::vector<ColumnMetaData> agg_columns;
     size_t i = 0;
     constexpr const char* kDistinctPrefix = "DISTINCT ";
 
@@ -138,6 +124,7 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
 
         if (func == "COUNT" && col == "*") {
             factories.push_back([]() { return std::make_shared<CountAll>(); });
+            agg_columns.push_back({"COUNT(*)", GetType("int64")});
             continue;
         }
 
@@ -145,9 +132,8 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
         std::string raw_col = is_distinct ? col.substr(std::char_traits<char>::length(kDistinctPrefix))
                                           : col;
 
-        size_t real_id = GetColumnId(raw_col, true);
-        size_t id = GetColumnId(raw_col, false);
-        bool is_str = schema_.columns[real_id].type->GetTypeName() == "string";
+        size_t id = GetColumnId(raw_col);
+        bool is_str = cur_schema_.columns[id].type->GetTypeName() == "string";
         if (func == "COUNT" && is_distinct) {
             if (is_str) {
                 factories.push_back(
@@ -156,29 +142,40 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
                 factories.push_back(
                     [id, raw_col]() { return std::make_shared<IntCountDistinct>(id, raw_col); });
             }
+            agg_columns.push_back({"COUNT(DISTINCT " + raw_col + ")", GetType("int64")});
         } else if (func == "SUM") {
             factories.push_back([id, raw_col]() { return std::make_shared<IntSum>(id, raw_col); });
+            agg_columns.push_back({"SUM(" + raw_col + ")", GetType("int64")});
         } else if (func == "MIN") {
             if (is_str) {
                 factories.push_back(
                     [id, raw_col]() { return std::make_shared<StrMin>(id, raw_col); });
+                agg_columns.push_back({"MIN(" + raw_col + ")", GetType("string")});
             } else {
                 factories.push_back(
                     [id, raw_col]() { return std::make_shared<IntMin>(id, raw_col); });
+                agg_columns.push_back({"MIN(" + raw_col + ")", GetType("int64")});
             }
         } else if (func == "MAX") {
             if (is_str) {
                 factories.push_back(
                     [id, raw_col]() { return std::make_shared<StrMax>(id, raw_col); });
+                agg_columns.push_back({"MAX(" + raw_col + ")", GetType("string")});
             } else {
                 factories.push_back(
                     [id, raw_col]() { return std::make_shared<IntMax>(id, raw_col); });
+                agg_columns.push_back({"MAX(" + raw_col + ")", GetType("int64")});
             }
         } else if (func == "AVG") {
             factories.push_back([id, raw_col]() { return std::make_shared<IntAvg>(id, raw_col); });
+            agg_columns.push_back({"AVG(" + raw_col + ")", GetType("int64")});
         } else {
             throw std::runtime_error("Unknown aggregate function: " + func);
         }
+    }
+
+    for (auto& col : agg_columns) {
+        cur_schema_.columns.push_back(std::move(col));
     }
 
     return factories;

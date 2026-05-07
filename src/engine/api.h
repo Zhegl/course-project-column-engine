@@ -37,9 +37,8 @@ public:
     }
     template <typename... Args>
     ApiPipeline Select(Args... args) {
-        selected_columns_ = {std::string(args)...};
-        for (const auto& name : selected_columns_) {
-            parser_.GetColumnId(name);
+        for (const auto& name : {std::string(args)...}) {
+            selected_columns_.push_back(parser_.GetColumnId(name));
         }
         return *this;
     }
@@ -50,7 +49,7 @@ private:
     void MaterializePendingOrder();
     Engine& engine_;
     QueryParser parser_;
-    std::vector<std::string> selected_columns_;
+    std::vector<size_t> selected_columns_;
     std::shared_ptr<Operator> root_;
     std::shared_ptr<Scan> scanner_;
     std::optional<std::string> pending_order_col_;

@@ -13,7 +13,6 @@
 
 namespace column_engine {
 
-size_t GetColumnIndex(const EngineBatch& batch, const std::string& name);
 
 class Operator {
 public:
@@ -86,14 +85,14 @@ private:
 
 class Sort : public Operator {
 public:
-    Sort(std::shared_ptr<Operator> child, std::string col, bool reversed)
-        : child_(std::move(child)), col_(col), reversed_(reversed) {
+    Sort(std::shared_ptr<Operator> child, size_t col_idx, bool reversed)
+        : child_(std::move(child)), col_idx_(col_idx), reversed_(reversed) {
     }
     std::optional<EngineBatch> GetNext() override;
 
 private:
     std::shared_ptr<Operator> child_;
-    std::string col_;
+    size_t col_idx_;
     bool reversed_;
 };
 
@@ -112,13 +111,13 @@ private:
 
 class TopK : public Operator {
 public:
-    TopK(std::shared_ptr<Operator> child, std::string col, bool reversed, size_t limit)
-        : child_(std::move(child)), col_(col), reversed_(reversed), limit_(limit) {
+    TopK(std::shared_ptr<Operator> child, size_t col_idx, bool reversed, size_t limit)
+        : child_(std::move(child)), col_idx_(col_idx), reversed_(reversed), limit_(limit) {
     }
     std::optional<EngineBatch> GetNext() override;
 private:
     std::shared_ptr<Operator> child_;
-    std::string col_;
+    size_t col_idx_;
     bool reversed_;
     size_t limit_;
 };
@@ -154,7 +153,7 @@ class Engine {
 public:
     explicit Engine(const std::string& path);
     EngineBatch Run(std::shared_ptr<Operator> root,
-                    const std::vector<std::string>& selected_columns = {});
+                    const std::vector<size_t>& selected_columns = {});
     std::shared_ptr<Scan> MakeScan();
     ApiPipeline Api();
 

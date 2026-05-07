@@ -57,7 +57,8 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
 
 ApiPipeline ApiPipeline::Limit(size_t arg) {
     if (pending_order_col_) {
-        root_ = std::make_shared<TopK>(root_, *pending_order_col_, pending_order_reversed_, arg);
+        size_t col_idx = parser_.GetColumnId(*pending_order_col_);
+        root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg);
         pending_order_col_.reset();
     } else {
         root_ = std::make_shared<LimitOp>(root_, arg);
@@ -87,11 +88,24 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
 
     parser_.SetSchema(new_schema);
 
+    size_t schema_before_agg = new_schema.columns.size();
+    auto agg_factories = parser_.ParseAggregate(aggregates);
+
+    Schema agg_schema;
+    Schema full_schema = parser_.GetSchema();
+    for (size_t i = 0; i < schema_before_agg; ++i) {
+        agg_schema.columns.push_back(full_schema.columns[i]);
+    }
+    for (size_t i = full_schema.columns.size() - agg_factories.size(); i < full_schema.columns.size(); ++i) {
+        agg_schema.columns.push_back(full_schema.columns[i]);
+    }
+    parser_.SetSchema(agg_schema);
+
     root_ = std::make_shared<class Aggregate>(
         root_,
         std::move(group_column_ids),
         std::move(group_columns),
-        parser_.ParseAggregate(aggregates));
+        std::move(agg_factories));
 
 
 
@@ -101,7 +115,8 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
 
 void ApiPipeline::MaterializePendingOrder() {
     if (pending_order_col_) {
-        root_ = std::make_shared<Sort>(root_, *pending_order_col_, pending_order_reversed_);
+        size_t col_idx = parser_.GetColumnId(*pending_order_col_);
+        root_ = std::make_shared<Sort>(root_, col_idx, pending_order_reversed_);
         pending_order_col_.reset();
     }
 }

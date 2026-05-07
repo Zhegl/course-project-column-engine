@@ -10,7 +10,6 @@
 #include <numeric>
 #include <optional>
 #include <queue>
-#include <stdexcept>
 #include <type_traits>
 #include <vector>
 #include "batch.h"
@@ -43,15 +42,6 @@ std::optional<EngineBatch> GetAllBatches(std::shared_ptr<Operator> op, size_t li
 }
 
 }  // namespace
-
-size_t GetColumnIndex(const EngineBatch& batch, const std::string& name) {
-    for (size_t i = 0; i < batch.names.size(); ++i) {
-        if (batch.names[i] == name) {
-            return i;
-        }
-    }
-    throw std::runtime_error("Key error: " + name);
-}
 
 Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
     : reader_(FileReader(path)),
@@ -177,8 +167,7 @@ std::optional<EngineBatch> LimitOp::GetNext() {
 
 std::optional<EngineBatch> Sort::GetNext() {
     if (auto result = GetAllBatches(child_)) {
-        size_t col_id = GetColumnIndex(result.value(), col_);
-        const ColumnData& col = result->columns[col_id];
+        const ColumnData& col = result->columns[col_idx_];
         std::sort(result->selection.begin(), result->selection.end(),
                   [&](RowIndex lhs, RowIndex rhs) { return LessAt(col, lhs, rhs); });
         if (reversed_) {
@@ -242,7 +231,7 @@ std::optional<EngineBatch> TopK::GetNext() {
         if (!initialized) {
             names = batch->names;
             schema_columns = batch->columns;
-            sort_col_idx = GetColumnIndex(*batch, col_);
+            sort_col_idx = col_idx_;
             initialized = true;
         }
         for (auto i : batch->selection) {
@@ -310,7 +299,7 @@ std::shared_ptr<Scan> Engine::MakeScan() {
 }
 
 EngineBatch Engine::Run(std::shared_ptr<Operator> root,
-                        const std::vector<std::string>& selected_columns) {
+                        const std::vector<size_t>& selected_columns) {
 
     if (auto probe = GetAllBatches(root)) {
         EngineBatch result = probe.value();
@@ -319,22 +308,14 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root,
         }
 
         EngineBatch selected_result;
-        if (result.names.empty()) {
-            selected_result.names = selected_columns;
-            return selected_result;
-        }
-
         selected_result.selection = result.selection;
-        for (const auto& name : selected_columns) {
-            size_t col = GetColumnIndex(result, name);
+        for (size_t col : selected_columns) {
             selected_result.names.push_back(result.names[col]);
             selected_result.columns.push_back(result.columns[col]);
         }
         return selected_result;
     }
-    EngineBatch result;
-    result.names = selected_columns;
-    return result;
+    return EngineBatch{};
 }
 
 ApiPipeline Engine::Api() {

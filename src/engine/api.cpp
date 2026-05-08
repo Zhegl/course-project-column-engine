@@ -67,8 +67,9 @@ ApiPipeline ApiPipeline::Limit(size_t arg) {
 }
 
 ApiPipeline ApiPipeline::Rename(std::string from, std::string to) {
+    size_t id = parser_.GetColumnId(from);
     Schema new_schema = parser_.GetSchema();
-    new_schema.columns[parser_.GetColumnId(from)].name = to;
+    new_schema.columns[id].name = to;
     parser_.SetSchema(new_schema);
     root_ = std::make_shared<As>(root_, from, to);
     return *this;
@@ -80,26 +81,18 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
     for (const auto& name : group_columns) {
         group_column_ids.push_back(parser_.GetColumnId(name));
     }
-    Schema old_schema = parser_.GetSchema();
+    Schema cur_schema = parser_.GetSchema();
+
+    auto [agg_factories, agg_columns] = parser_.ParseAggregate(aggregates);
+
     Schema new_schema;
     for (size_t id : group_column_ids) {
-        new_schema.columns.push_back(old_schema.columns[id]);
+        new_schema.columns.push_back(cur_schema.columns[id]);
     }
-
+    for (auto& col : agg_columns) {
+        new_schema.columns.push_back(std::move(col));
+    }
     parser_.SetSchema(new_schema);
-
-    size_t schema_before_agg = new_schema.columns.size();
-    auto agg_factories = parser_.ParseAggregate(aggregates);
-
-    Schema agg_schema;
-    Schema full_schema = parser_.GetSchema();
-    for (size_t i = 0; i < schema_before_agg; ++i) {
-        agg_schema.columns.push_back(full_schema.columns[i]);
-    }
-    for (size_t i = full_schema.columns.size() - agg_factories.size(); i < full_schema.columns.size(); ++i) {
-        agg_schema.columns.push_back(full_schema.columns[i]);
-    }
-    parser_.SetSchema(agg_schema);
 
     root_ = std::make_shared<class Aggregate>(
         root_,

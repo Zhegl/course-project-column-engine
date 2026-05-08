@@ -97,7 +97,7 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     throw std::runtime_error("Unsupported WHERE: " + arg);
 }
 
-std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
+std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::ParseAggregate(const std::string& arg) {
     std::vector<AggFactory> factories;
     std::vector<ColumnMetaData> agg_columns;
     size_t i = 0;
@@ -174,11 +174,7 @@ std::vector<AggFactory> QueryParser::ParseAggregate(const std::string& arg) {
         }
     }
 
-    for (auto& col : agg_columns) {
-        cur_schema_.columns.push_back(std::move(col));
-    }
-
-    return factories;
+    return {std::move(factories), std::move(agg_columns)};
 }
 
 }  // namespace column_engine

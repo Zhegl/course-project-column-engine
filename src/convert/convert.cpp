@@ -126,7 +126,15 @@ void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std:
                     writer.Write(',');
                 }
                 std::string data = ColumnTypeToString(get_value(columns[j], i));
-                writer.Write(data.data(), data.size());
+                bool needs_quoting = data.find('\n') != std::string::npos ||
+                                     data.find(',') != std::string::npos;
+                if (needs_quoting) {
+                    writer.Write('"');
+                    writer.Write(data.data(), data.size());
+                    writer.Write('"');
+                } else {
+                    writer.Write(data.data(), data.size());
+                }
             }
             writer.Write('\n');
         }

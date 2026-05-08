@@ -9,7 +9,6 @@
 #include <memory>
 #include <numeric>
 #include <optional>
-#include <queue>
 #include <type_traits>
 #include <vector>
 #include "batch.h"
@@ -196,88 +195,66 @@ std::optional<EngineBatch> TopK::GetNext() {
         return GetAllBatches(child_, 0);
     }
 
-    struct TopKRow {
+    struct Row {
         std::vector<ColumnValue> values;
         size_t order;
     };
 
-    size_t sort_col_idx = 0;
-
-    auto is_better = [&](const TopKRow& lhs, const TopKRow& rhs) {
-        const ColumnValue& left = lhs.values[sort_col_idx];
-        const ColumnValue& right = rhs.values[sort_col_idx];
-        if (LessColumnValue(left, right)) {
-            return !reversed_;
-        }
-        if (LessColumnValue(right, left)) {
-            return reversed_;
-        }
+    auto is_better = [&](const Row& lhs, const Row& rhs) {
+        const ColumnValue& l = lhs.values[col_idx_];
+        const ColumnValue& r = rhs.values[col_idx_];
+        if (LessColumnValue(l, r)) { return !reversed_; }
+        if (LessColumnValue(r, l)) { return reversed_; }
         return lhs.order < rhs.order;
     };
 
-
-    std::vector<TopKRow> heap_storage;
-    size_t next_order = 0;
-    bool initialized = false;
-    std::vector<std::string> names;
-    std::vector<ColumnData> schema_columns;
-
-    auto heap_cmp = [&](size_t lhs, size_t rhs) {
-        return is_better(heap_storage[lhs], heap_storage[rhs]);
+    auto heap_cmp = [&](const Row& lhs, const Row& rhs) {
+        return is_better(lhs, rhs);
     };
-    std::priority_queue<size_t, std::vector<size_t>, decltype(heap_cmp)> heap(heap_cmp);
+
+    std::vector<std::string> names;
+    std::vector<Row> heap;
+    size_t next_order = 0;
 
     while (auto batch = child_->GetNext()) {
-        if (!initialized) {
+        if (names.empty()) {
             names = batch->names;
-            schema_columns = batch->columns;
-            sort_col_idx = col_idx_;
-            initialized = true;
         }
         for (auto i : batch->selection) {
-            TopKRow row;
+            Row row;
             row.order = next_order++;
-            row.values.reserve(batch->columns.size());
-            for (const auto& column : batch->columns) {
-                row.values.push_back(GetColumnValue(column, i));
+            for (const auto& col : batch->columns) {
+                row.values.push_back(GetColumnValue(col, i));
             }
-
-            heap_storage.push_back(std::move(row));
-            size_t row_idx = heap_storage.size() - 1;
             if (heap.size() < limit_) {
-                heap.push(row_idx);
-                continue;
-            }
-            if (is_better(heap_storage[row_idx], heap_storage[heap.top()])) {
-                heap.pop();
-                heap.push(row_idx);
+                heap.push_back(std::move(row));
+                if (heap.size() == limit_) {
+                    std::make_heap(heap.begin(), heap.end(), heap_cmp);
+                }
+            } else if (is_better(row, heap.front())) {
+                std::pop_heap(heap.begin(), heap.end(), heap_cmp);
+                heap.back() = std::move(row);
+                std::push_heap(heap.begin(), heap.end(), heap_cmp);
             }
         }
     }
 
-    if (!initialized) {
+    if (names.empty()) {
         return std::nullopt;
     }
 
-    std::vector<size_t> best_rows;
-    best_rows.reserve(heap.size());
-    while (!heap.empty()) {
-        best_rows.push_back(heap.top());
-        heap.pop();
-    }
-
-    std::sort(best_rows.begin(), best_rows.end(), [&](size_t lhs, size_t rhs) {
-        return is_better(heap_storage[lhs], heap_storage[rhs]);
+    std::sort(heap.begin(), heap.end(), [&](const Row& lhs, const Row& rhs) {
+        return is_better(lhs, rhs);
     });
 
     EngineBatch result;
     result.names = std::move(names);
-    for (const auto& col : schema_columns) {
-        result.columns.push_back(MakeEmptyColumnLike(col));
+    for (size_t col = 0; col < result.names.size(); ++col) {
+        result.columns.push_back(MakeEmptyColumnLike(MakeColumnData(heap[0].values[col])));
     }
-    for (size_t row_idx : best_rows) {
-        for (size_t col = 0; col < heap_storage[row_idx].values.size(); ++col) {
-            AppendColumnValue(result.columns[col], heap_storage[row_idx].values[col]);
+    for (const auto& row : heap) {
+        for (size_t col = 0; col < row.values.size(); ++col) {
+            AppendColumnValue(result.columns[col], row.values[col]);
         }
         result.selection.push_back(result.selection.size());
     }

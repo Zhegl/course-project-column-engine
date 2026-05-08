@@ -1,6 +1,7 @@
 #include "types.h"
 #include <sys/types.h>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -37,29 +38,89 @@ ColumnValue ColumnTypeString::ConvertType(std::string val) {
 }
 
 size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
-    size_t result = 0;
-    for (auto val : data) {
-        writer.Write(std::get<std::string>(val).data(), std::get<std::string>(val).size() + 1);
-        result += std::get<std::string>(val).size() + 1;
+    std::map<std::string, int64_t> dict;
+    std::vector<std::string> reverse_dict;
+
+    uint32_t words_size = 0;
+
+    for (auto& val : data) {
+        if (dict.find(std::get<std::string>(val)) == dict.end()) {
+            dict[std::get<std::string>(val)] = dict.size();
+            reverse_dict.emplace_back(std::get<std::string>(val));
+            words_size += std::get<std::string>(val).size();
+        }
     }
+
+    size_t result = 0;
+
+    uint16_t n_words = static_cast<uint16_t>(data.size());
+    uint16_t n_uwords = static_cast<uint16_t>(dict.size());
+
+    // header: n_words(2) + n_uwords(2) + final_offset(4) + (n_uwords+1)*offsets(4 each)
+    uint32_t final_offset = sizeof(n_words) + sizeof(n_uwords) + sizeof(uint32_t) +
+                            (n_uwords + 1) * sizeof(uint32_t) + words_size;
+
+    writer.Write(n_words);
+    result += sizeof(n_words);
+    writer.Write(n_uwords);
+    result += sizeof(n_uwords);
+    writer.Write(final_offset);
+    result += sizeof(final_offset);
+
+    uint32_t pos = 0;
+    writer.Write(pos);
+    result += sizeof(pos);
+    for (const auto& str : reverse_dict) {
+        pos += static_cast<uint32_t>(str.size());
+        writer.Write(pos);
+        result += sizeof(pos);
+    }
+
+    for (const auto& str : reverse_dict) {
+        writer.Write(str.data(), str.size());
+        result += str.size();
+    }
+
+    std::vector<ColumnValue> idx;
+    idx.reserve(data.size());
+    for (const auto& val : data) {
+        idx.emplace_back(dict[std::get<std::string>(val)]);
+    }
+
+    ColumnTypeInt64 helper;
+    result += helper.WriteType(idx, writer);
+
     return result;
 }
 
 ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
-    std::vector<std::string> result;
-    std::string add;
-    char symbol;
-    while (size) {
-        while (reader.Read(&symbol, 1)) {
-            --size;
-            if (symbol == '\000') {
-                break;
-            }
-            add.push_back(symbol);
-        }
-        result.emplace_back(add);
-        add.clear();
+    uint16_t n_words = reader.Read<uint16_t>();
+    uint16_t n_uwords = reader.Read<uint16_t>();
+    uint32_t final_offset = reader.Read<uint32_t>();
+
+    std::vector<uint32_t> idx;
+    idx.reserve(n_uwords + 1);
+    for (size_t i = 0; i < static_cast<size_t>(n_uwords) + 1; ++i) {
+        idx.push_back(reader.Read<uint32_t>());
     }
+
+    size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
+                         (n_uwords + 1) * sizeof(uint32_t);
+    size_t raw_size = final_offset - header_size;
+    std::string raw;
+    raw.resize(raw_size);
+    reader.Read(raw.data(), raw_size);
+
+    ColumnTypeInt64 helper;
+    auto data = helper.GetBatch(size - final_offset, reader);
+
+    std::vector<std::string> result;
+    result.reserve(n_words);
+    for (size_t i = 0; i < n_words; ++i) {
+        auto pos = static_cast<size_t>(std::get<std::vector<int64_t>>(data)[i]);
+        result.push_back(raw.substr(idx[pos], idx[pos + 1] - idx[pos]));
+    }
+
     return result;
 }
 
@@ -78,12 +139,12 @@ ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
     const size_t block_size = 1000;
-    size_t blocks = (data.size() + block_size - 1) / block_size;
+    uint16_t blocks = static_cast<uint16_t>((data.size() + block_size - 1) / block_size);
 
     size_t result = 0;
     std::vector<int64_t> min_val(blocks);
     std::vector<int64_t> max_val(blocks);
-    std::vector<size_t> sz(blocks, 1);
+    std::vector<uint8_t> sz(blocks, 1);
 
     for (size_t i = 0; i < data.size(); ++i) {
         if (i % block_size == 0 || min_val[i / block_size] > std::get<int64_t>(data[i])) {
@@ -94,23 +155,24 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
         }
     }
 
-    size_t tba = sizeof(size_t) + (sizeof(size_t) * 2 + sizeof(int64_t)) * blocks;
+    uint32_t tba = sizeof(blocks) + (sizeof(int64_t) + sizeof(uint8_t) + sizeof(uint32_t)) * blocks;
     writer.Write(blocks);
-    result += sizeof(size_t);
+    result += sizeof(blocks);
 
     for (size_t i = 0; i < blocks; ++i) {
         uint64_t delta = static_cast<uint64_t>(max_val[i]) - static_cast<uint64_t>(min_val[i]);
         if (delta != 0) {
-            sz[i] = (64 - __builtin_clzll(delta) + 7) / 8;
+            sz[i] = static_cast<uint8_t>((64 - __builtin_clzll(delta) + 7) / 8);
         }
         writer.Write(min_val[i]);
         result += sizeof(int64_t);
         writer.Write(sz[i]);
-        result += sizeof(size_t);
+        result += sizeof(uint8_t);
         writer.Write(tba);
-        result += sizeof(size_t);
-        tba += sz[i] * block_size;
+        result += sizeof(uint32_t);
+        tba += sz[i] * static_cast<uint32_t>(block_size);
     }
+
     for (size_t i = 0; i < data.size(); ++i) {
         uint64_t val_norm = static_cast<uint64_t>(std::get<int64_t>(data[i])) -
                             static_cast<uint64_t>(min_val[i / block_size]);
@@ -123,17 +185,17 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
 ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
-    std::vector<size_t> read_sz;
-    std::vector<size_t> block_offset;
-    size_t blocks = reader.Read<size_t>();
+    std::vector<uint8_t> read_sz;
+    std::vector<uint32_t> block_offset;
+
+    uint16_t blocks = reader.Read<uint16_t>();
 
     for (size_t i = 0; i < blocks; ++i) {
         min_val.push_back(reader.Read<int64_t>());
-        read_sz.push_back(reader.Read<size_t>());
-        block_offset.push_back(reader.Read<size_t>());
+        read_sz.push_back(reader.Read<uint8_t>());
+        block_offset.push_back(reader.Read<uint32_t>());
     }
-    // LOG(INFO) << "size=" << size << " block_offset[0]=" << block_offset[0]
-    //      << " blocks=" << blocks << " read_sz=" << read_sz[0] << "\n";
+
     size_t block = 0;
     size_t i = block_offset[0];
     uint64_t val = 0;
@@ -145,7 +207,6 @@ ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
         reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
         result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
         i += read_sz[block];
-        // LOG(INFO) << "result.size()=" << result.size() << " i=" << i << "\n";
     }
 
     return result;

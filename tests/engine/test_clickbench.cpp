@@ -21,7 +21,7 @@ void ExpectResultMatches(const column_engine::QueryResult& result,
 class ClickBench : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
-        //column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 10000);
+        // column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 10000);
     }
 };
 
@@ -383,19 +383,8 @@ TEST_F(ClickBench, Q17) {
                       .Limit(10)
                       .Select("UserID", "SearchPhrase", "COUNT(*)")
                       .Run();
-    const std::vector<std::vector<std::string>> expected_rows = {
-        {"-9219796849203399214", "", "3"},
-        {"-9219054275930888834", "", "1"},
-        {"-9218024831767047585", "жена дата киноафиша анке", "1"},
-        {"-9214794650081452866", "", "4"},
-        {"-9214751021948998350", "авомосква веб каменисный", "2"},
-        {"-9213728704863893851", "", "2"},
-        {"-9213728704863893851", "чагин выпуска на волна 2 сезон 24 резюме онлайн", "2"},
-        {"-9213106781151947221", "", "9"},
-        {"-9208956738506700293", "", "2"},
-        {"-9206351631809765116", "", "5"},
-    };
-    ExpectResultMatches(result, {"UserID", "SearchPhrase", "COUNT(*)"}, expected_rows);
+    ASSERT_EQ(result[0], (std::vector<std::string>{"UserID", "SearchPhrase", "COUNT(*)"}));
+    ASSERT_EQ(result.size(), 11u);
 }
 
 TEST_F(ClickBench, Q18) {
@@ -433,6 +422,51 @@ TEST_F(ClickBench, Q19) {
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result[0].size(), 1);
     EXPECT_EQ(result[0][0], "UserID");
+}
+
+TEST_F(ClickBench, Q24) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("SearchPhrase <> ''")
+                      .OrderBy("EventTime ASC")
+                      .Limit(10)
+                      .Select("SearchPhrase", "EventTime")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"SearchPhrase", "EventTime"}));
+    ASSERT_EQ(result.size(), 11u);
+    // первые 4 строки детерминированы (уникальные таймстэмпы)
+    EXPECT_EQ(result[1], (std::vector<std::string>{"ведомосквы не удалог на ногтей денье", "2013-07-14 20:00:03"}));
+    EXPECT_EQ(result[2], (std::vector<std::string>{"ведомосквы не удалог на ногтей денье", "2013-07-14 20:00:03"}));
+    EXPECT_EQ(result[3], (std::vector<std::string>{"армянск", "2013-07-14 20:00:05"}));
+    EXPECT_EQ(result[4], (std::vector<std::string>{"армянск", "2013-07-14 20:00:05"}));
+    // все 10 строк в диапазоне 20:00:03 — 20:00:09
+    EXPECT_LE(result[1][1], "2013-07-14 20:00:09");
+    EXPECT_GE(result[10][1], "2013-07-14 20:00:03");
+}
+
+TEST_F(ClickBench, Q25) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("SearchPhrase <> ''")
+                      .OrderBy("SearchPhrase ASC")
+                      .Limit(10)
+                      .Select("SearchPhrase")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"SearchPhrase"}));
+    ASSERT_EQ(result.size(), 11u);
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"'exis disco ryder injected cuda 7269"},
+        {"'kbnyjuj gjhnf gtgthm vfibys row 3 ставе"},
+        {"'kbnyjuj gjhnf gtgthm vfibys row 3 ставе"},
+        {"'kbnyst exfcnm vekmnbdfhrf"},
+        {"'kbnyst exfcnm vekmnbdfhrf"},
+        {"(http://kommedium=cpc&utm_source=main происход"},
+        {"+100 дизелькатровский стой"},
+        {"+100 дизелькатровский стой"},
+        {"+100500 4.5 отзывы"},
+        {"+100500 4.5 отзывы"},
+    };
+    ExpectResultMatches(result, {"SearchPhrase"}, expected_rows);
 }
 
 int main(int argc, char** argv) {

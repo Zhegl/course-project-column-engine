@@ -119,6 +119,15 @@ QueryResult ApiPipeline::Run() {
     scanner_->SetColumns(parser_.GetColumnsForScan());
     EngineBatch batch = engine_.Run(root_, selected_columns_);
     QueryResult result;
+    if (batch.names.empty() && !selected_columns_.empty()) {
+        Schema cur = parser_.GetSchema();
+        std::vector<std::string> names;
+        for (size_t idx : selected_columns_) {
+            names.push_back(cur.columns[idx].name);
+        }
+        result.push_back(std::move(names));
+        return result;
+    }
     result.push_back(batch.names);
     for (auto i : batch.selection) {
         result.emplace_back();

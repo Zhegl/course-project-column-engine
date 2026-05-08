@@ -1,6 +1,6 @@
 #pragma once
 #include <cstdint>
-#include <fstream>
+#include <cstddef>
 #include <string>
 
 namespace column_engine {
@@ -8,6 +8,10 @@ namespace column_engine {
 class FileReader {
 public:
     FileReader(const std::string& path);
+    ~FileReader();
+
+    FileReader(const FileReader&) = delete;
+    FileReader& operator=(const FileReader&) = delete;
 
     bool Read(char* data, size_t size);
 
@@ -27,7 +31,10 @@ public:
     }
 
 private:
-    std::ifstream stream_;
+    char* base_ = nullptr;
+    size_t size_ = 0;
+    size_t pos_ = 0;
+    int fd_ = -1;
 };
 
 };  // namespace column_engine

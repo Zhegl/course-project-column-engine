@@ -5,6 +5,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 #include <glog/logging.h>
@@ -112,7 +113,7 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     reader.Read(raw.data(), raw_size);
 
     ColumnTypeInt64 helper;
-    auto data = helper.GetBatch(size - final_offset, reader);
+    auto data = helper.GetBatch(0, reader);
 
     std::vector<std::string> result;
     result.reserve(n_words);
@@ -138,13 +139,18 @@ ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
 }
 
 size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& writer) {
-    const size_t block_size = 1000;
+    const size_t block_size = 512;
+    const size_t rle_decision = 5;
+
     uint16_t blocks = static_cast<uint16_t>((data.size() + block_size - 1) / block_size);
+    uint32_t n_values = static_cast<uint32_t>(data.size());
 
     size_t result = 0;
+
     std::vector<int64_t> min_val(blocks);
     std::vector<int64_t> max_val(blocks);
     std::vector<uint8_t> sz(blocks, 1);
+    std::unordered_set<int64_t> unique;
 
     for (size_t i = 0; i < data.size(); ++i) {
         if (i % block_size == 0 || min_val[i / block_size] > std::get<int64_t>(data[i])) {
@@ -153,60 +159,102 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
         if (i % block_size == 0 || max_val[i / block_size] < std::get<int64_t>(data[i])) {
             max_val[i / block_size] = std::get<int64_t>(data[i]);
         }
+        unique.insert(std::get<int64_t>(data[i]));
     }
 
-    uint32_t tba = sizeof(blocks) + (sizeof(int64_t) + sizeof(uint8_t) + sizeof(uint32_t)) * blocks;
-    writer.Write(blocks);
-    result += sizeof(blocks);
+    bool rle = (unique.size() * rle_decision < data.size());
+
+    writer.Write<bool>(rle);   result += sizeof(bool);
+    writer.Write(n_values);    result += sizeof(n_values);
+    writer.Write(blocks);      result += sizeof(blocks);
 
     for (size_t i = 0; i < blocks; ++i) {
         uint64_t delta = static_cast<uint64_t>(max_val[i]) - static_cast<uint64_t>(min_val[i]);
         if (delta != 0) {
             sz[i] = static_cast<uint8_t>((64 - __builtin_clzll(delta) + 7) / 8);
         }
-        writer.Write(min_val[i]);
-        result += sizeof(int64_t);
-        writer.Write(sz[i]);
-        result += sizeof(uint8_t);
-        writer.Write(tba);
-        result += sizeof(uint32_t);
-        tba += sz[i] * static_cast<uint32_t>(block_size);
+        uint32_t block_start = static_cast<uint32_t>(i * block_size);
+        writer.Write(min_val[i]);   result += sizeof(int64_t);
+        writer.Write(sz[i]);        result += sizeof(uint8_t);
+        writer.Write(block_start);  result += sizeof(uint32_t);
     }
 
-    for (size_t i = 0; i < data.size(); ++i) {
-        uint64_t val_norm = static_cast<uint64_t>(std::get<int64_t>(data[i])) -
-                            static_cast<uint64_t>(min_val[i / block_size]);
-        writer.Write(reinterpret_cast<const char*>(&val_norm), sz[i / block_size]);
-        result += sz[i / block_size];
+    if (rle) {
+        uint64_t val_last = 0;
+        uint8_t cnt = 0;
+        for (size_t i = 0; i < data.size(); ++i) {
+            uint64_t val_norm = static_cast<uint64_t>(std::get<int64_t>(data[i])) -
+                                static_cast<uint64_t>(min_val[i / block_size]);
+            if (cnt != 0 && (val_norm != val_last || i / block_size != (i - 1) / block_size || cnt == 255)) {
+                writer.Write<uint8_t>(cnt);
+                writer.Write(reinterpret_cast<const char*>(&val_last), sz[(i - 1) / block_size]);
+                result += sizeof(uint8_t) + sz[(i - 1) / block_size];
+                cnt = 0;
+            }
+            val_last = val_norm;
+            ++cnt;
+        }
+        writer.Write<uint8_t>(cnt);
+        writer.Write(reinterpret_cast<const char*>(&val_last), sz.back());
+        result += sizeof(uint8_t) + sz.back();
+    } else {
+        for (size_t i = 0; i < data.size(); ++i) {
+            uint64_t val_norm = static_cast<uint64_t>(std::get<int64_t>(data[i])) -
+                                static_cast<uint64_t>(min_val[i / block_size]);
+            writer.Write(reinterpret_cast<const char*>(&val_norm), sz[i / block_size]);
+            result += sz[i / block_size];
+        }
     }
+
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReader& reader) {
+ColumnData ColumnTypeInt64::GetBatch(size_t /*size*/, FileReader& reader) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;
-    std::vector<uint32_t> block_offset;
+    std::vector<uint32_t> block_start;
 
+    bool rle = reader.Read<bool>();
+    uint32_t n_values = reader.Read<uint32_t>();
     uint16_t blocks = reader.Read<uint16_t>();
 
     for (size_t i = 0; i < blocks; ++i) {
         min_val.push_back(reader.Read<int64_t>());
         read_sz.push_back(reader.Read<uint8_t>());
-        block_offset.push_back(reader.Read<uint32_t>());
+        block_start.push_back(reader.Read<uint32_t>());
     }
 
-    size_t block = 0;
-    size_t i = block_offset[0];
-    uint64_t val = 0;
-    while (i < size) {
-        if (block + 1 != blocks && i >= block_offset[block + 1]) {
-            ++block;
+    result.reserve(n_values);
+
+    if (rle) {
+        size_t count = 0;
+        size_t block = 0;
+        uint64_t val = 0;
+        while (count < n_values) {
+            if (block + 1 < blocks && count >= block_start[block + 1]) {
+                ++block;
+            }
+            uint8_t n = reader.Read<uint8_t>();
             val = 0;
+            reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
+            int64_t res = static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block]));
+            for (uint8_t k = 0; k < n; ++k) {
+                result.push_back(res);
+            }
+            count += n;
         }
-        reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
-        result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
-        i += read_sz[block];
+    } else {
+        size_t block = 0;
+        uint64_t val = 0;
+        for (size_t i = 0; i < n_values; ++i) {
+            if (block + 1 < blocks && i >= block_start[block + 1]) {
+                ++block;
+                val = 0;
+            }
+            reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
+            result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
+        }
     }
 
     return result;

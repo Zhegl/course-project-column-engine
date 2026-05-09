@@ -1,0 +1,21 @@
+add_executable(test_engine
+    test_engine.cpp
+)
+target_link_libraries(test_engine
+    PRIVATE
+        engine_lib
+        convert_lib
+        gtest
+        glog::glog
+)
+
+add_executable(test_clickbench
+    test_clickbench.cpp
+)
+target_link_libraries(test_clickbench
+    PRIVATE
+        engine_lib
+        convert_lib
+        gtest
+        glog::glog
+)

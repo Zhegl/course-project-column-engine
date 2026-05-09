@@ -1,18 +1,27 @@
 #pragma once
-#include <fstream>
+#include <cstdint>
+#include <cstddef>
 #include <string>
+
+namespace column_engine {
 
 class FileReader {
 public:
     FileReader(const std::string& path);
+    ~FileReader();
+
+    FileReader(const FileReader&) = delete;
+    FileReader& operator=(const FileReader&) = delete;
 
     bool Read(char* data, size_t size);
 
     bool Eof();
 
-    void Jump(size_t offset);
+    void Jump(int64_t offset);
 
     size_t Size();
+
+    size_t GetPos();
 
     template <typename T>
     T Read() {
@@ -22,5 +31,10 @@ public:
     }
 
 private:
-    std::ifstream stream_;
+    char* base_ = nullptr;
+    size_t size_ = 0;
+    size_t pos_ = 0;
+    int fd_ = -1;
 };
+
+};  // namespace column_engine

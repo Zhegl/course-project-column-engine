@@ -1,22 +1,62 @@
 #pragma once
 #include <io/file_reader.h>
-#include <interface/metadata.h>
 #include <io/file_writer.h>
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
 
-using ColumnType = std::variant<uint64_t, std::string>;
+namespace column_engine {
 
-ColumnType ConvertType(std::string val, ColumnTypeName type);
+using ColumnValue = std::variant<int64_t, std::string>;
+using ColumnData = std::variant<std::vector<int64_t>, std::vector<std::string>>;
 
-std::string ColumnTypeToString(ColumnType data);
+class ColumnTypeName {
+public:
+    virtual ColumnValue ConvertType(std::string val) = 0;
+    virtual std::string GetTypeName() = 0;
+    virtual ColumnData GetBatch(size_t size, FileReader& reader) = 0;
+    virtual size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) = 0;
+    virtual ~ColumnTypeName() = default;
+};
 
-std::string GetTypeName(ColumnTypeName type);
+class ColumnTypeString : public ColumnTypeName {
+public:
+    ColumnValue ConvertType(std::string val) override;
+    std::string GetTypeName() override;
+    ColumnData GetBatch(size_t size, FileReader& reader) override;
+    size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) override;
+    ~ColumnTypeString() override = default;
+};
 
-ColumnTypeName GetType(const std::string& name);
+class ColumnTypeInt64 : public ColumnTypeName {
+public:
+    std::string GetTypeName() override;
+    ColumnValue ConvertType(std::string val) override;
+    ColumnData GetBatch(size_t size, FileReader& reader) override;
+    size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) override;
+    ~ColumnTypeInt64() override = default;
+};
 
-size_t WriteType(std::vector<ColumnType> data, ColumnTypeName type, FileWriter& writer);
+// enum class ColumnTypeName { String = 0, Int64 = 1 };
 
-std::vector<ColumnType> GetBatch(size_t size, ColumnTypeName type, FileReader& reader);
+struct ColumnMetaData {
+    std::string name;
+    std::shared_ptr<ColumnTypeName> type;
+};
+
+struct BatchMetaData {
+    size_t size;
+    size_t offset;
+};
+
+struct Schema {
+    std::vector<ColumnMetaData> columns;
+};
+
+std::string ColumnTypeToString(ColumnValue data);
+
+std::shared_ptr<ColumnTypeName> GetType(const std::string& name);
+
+};  // namespace column_engine

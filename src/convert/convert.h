@@ -1,6 +1,8 @@
 #include <string>
-void ConvertToColumnar(const std::string& input_path, const std::string& scheme_path,
+namespace column_engine {
+void ConvertToColumnar(const std::string& input_path, const std::string& schema_path,
                        const std::string& output_path, const size_t batch_size = 1000000);
 
-void ConvertToCsv(const std::string& input_path, const std::string& scheme_path,
+void ConvertToCsv(const std::string& input_path, const std::string& schema_path,
                   const std::string& output_path);
+};  // namespace column_engine

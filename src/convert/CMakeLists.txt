@@ -17,5 +17,4 @@ target_link_libraries(convert_lib
         format_lib
         io_lib
         types_lib
-        interface
 )

@@ -1,5 +1,5 @@
 add_library(format_lib
-    scheme_reader.cpp
+    schema_reader.cpp
     meta_reader.cpp
 )
 

@@ -1,5 +1,4 @@
 #include "parser.h"
-#include <algorithm>
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -71,8 +70,17 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     }
     ++i;
 
+    if (op == "NOT") {
+        std::string next;
+        while (i < arg.size() && arg[i] != ' ') {
+            next.push_back(arg[i++]);
+        }
+        ++i;
+        op = "NOT " + next;
+    }
+
     std::string val;
-    while (i < arg.size() && arg[i] != ' ') {
+    while (i < arg.size()) {
         val.push_back(arg[i++]);
     }
 
@@ -91,6 +99,12 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
         }
         if (op == "<>") {
             return std::make_shared<StrConstNE>(id, std::move(str_val));
+        }
+        if (op == "LIKE") {
+            return std::make_shared<StrLike>(id, std::move(str_val));
+        }
+        if (op == "NOT LIKE") {
+            return std::make_shared<StrNotLike>(id, std::move(str_val));
         }
     }
 

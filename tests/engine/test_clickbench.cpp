@@ -469,6 +469,60 @@ TEST_F(ClickBench, Q25) {
     ExpectResultMatches(result, {"SearchPhrase"}, expected_rows);
 }
 
+TEST_F(ClickBench, Q20) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("URL LIKE %google%")
+                      .Aggregate("COUNT(*)")
+                      .Select("COUNT(*)")
+                      .Run();
+    EXPECT_EQ(result[1][0], "95");
+}
+
+TEST_F(ClickBench, Q21) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("URL LIKE %google%")
+                      .Where("SearchPhrase <> ''")
+                      .GroupByAggregate("SearchPhrase", "MIN(URL), COUNT(*)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("SearchPhrase", "MIN(URL)", "c")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"один инструктура птахани нюши смотреть краси", "http://bdsm_position/2624217,2013-07-01:2013/frl-4/transport.ru/google%2F", "2"},
+    };
+    ExpectResultMatches(result, {"SearchPhrase", "MIN(URL)", "c"}, expected_rows);
+}
+
+TEST_F(ClickBench, Q22) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("Title LIKE %Google%")
+                      .Where("URL NOT LIKE %.google.%")
+                      .Where("SearchPhrase <> ''")
+                      .GroupByAggregate("SearchPhrase", "MIN(URL), MIN(Title), COUNT(*), COUNT(DISTINCT UserID)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("SearchPhrase", "MIN(URL)", "MIN(Title)", "c", "COUNT(DISTINCT UserID)")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"коптимиквиды юриста с роуз рая", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "45", "12"},
+        {"коптимиквиды юрий жд ворожные моем", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "16", "6"},
+        {"ведомосквы вместу", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Convent-мененции: Бизнес спродажа коттекст) Скейтшоп Proskater.ru - Дизайнер) 1992 г.в. Цена дачного века Кированнале актеры Google (La Charm Boxer группатии, оформационка NIKE TRADE-IN 6750$, (г. Днепрочитании онлайники — Избранное упражнения - играть и цене, выполная", "15", "9"},
+        {"вспомидоры,отека обучение стека", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "10", "1"},
+        {"коптимизаностиницы", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9404194,962453/foto-904263/fotokonkurs", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "8", "2"},
+        {"ведомосквиталия страции", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "8", "3"},
+        {"коптимашевск но в хорошем качестве", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "6", "3"},
+        {"поттек кисловая коньюктивное", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "5", "1"},
+        {"вспомидоры,отзывы луи видация", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9182/women", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "5", "2"},
+        {"коптимиквиды юрий последняя", "https://produkty%2Fpulove.ru/booklyattion-war-sinij-9404194,962453/foto", "Легко на участные участников., Цены - Стильная парнем. Саганрог догадения : Турции, купить у 10 дне кольные машинки не представки - Новая с избиение спродажа: котята 2014 г.в. Цена: 47500-10ECO060 – -------- купить квартиру Оренбург (России Galantrax Flamiliada Google, Nо 18 фотоконверк Супер Кардиган", "5", "1"},
+    };
+    ExpectResultMatches(result, {"SearchPhrase", "MIN(URL)", "MIN(Title)", "c", "COUNT(DISTINCT UserID)"}, expected_rows);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     google::InitGoogleLogging(argv[0]);

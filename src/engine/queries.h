@@ -180,4 +180,25 @@ private:
     std::string const_b_;
 };
 
+class StrLike : public FilterPredicate {
+public:
+    StrLike(size_t id_a, std::string pattern);
+    bool Check(EngineBatch& batch, RowIndex i) override;
+
+private:
+    size_t id_a_;
+    std::string prefix_;
+    std::string suffix_;
+    std::string infix_;  // non-empty only for %x% patterns
+};
+
+class StrNotLike : public FilterPredicate {
+public:
+    StrNotLike(size_t id_a, std::string pattern);
+    bool Check(EngineBatch& batch, RowIndex i) override;
+
+private:
+    StrLike inner_;
+};
+
 }  // namespace column_engine

@@ -86,26 +86,23 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
 
     const std::string& type_name = cur_schema_.columns[id].type->GetTypeName();
     if (type_name == "int64") {
-        if (op == "=") {
-            return std::make_shared<IntConstEQ>(id, std::stoll(val));
-        }
-        if (op == "<>") {
-            return std::make_shared<IntConstNE>(id, std::stoll(val));
-        }
+        int64_t v = std::stoll(val);
+        if (op == "=")  return std::make_shared<IntConstEQ>(id, v);
+        if (op == "<>") return std::make_shared<IntConstNE>(id, v);
+        if (op == "<")  return std::make_shared<IntConstLT>(id, v);
+        if (op == "<=") return std::make_shared<IntConstLE>(id, v);
+        if (op == ">")  return std::make_shared<IntConstGT>(id, v);
+        if (op == ">=") return std::make_shared<IntConstGE>(id, v);
     } else if (type_name == "string") {
         std::string str_val = UnquoteStringLiteral(val);
-        if (op == "=") {
-            return std::make_shared<StrConstEQ>(id, std::move(str_val));
-        }
-        if (op == "<>") {
-            return std::make_shared<StrConstNE>(id, std::move(str_val));
-        }
-        if (op == "LIKE") {
-            return std::make_shared<StrLike>(id, std::move(str_val));
-        }
-        if (op == "NOT LIKE") {
-            return std::make_shared<StrNotLike>(id, std::move(str_val));
-        }
+        if (op == "=")       return std::make_shared<StrConstEQ>(id, std::move(str_val));
+        if (op == "<>")      return std::make_shared<StrConstNE>(id, std::move(str_val));
+        if (op == "<")       return std::make_shared<StrConstLT>(id, std::move(str_val));
+        if (op == "<=")      return std::make_shared<StrConstLE>(id, std::move(str_val));
+        if (op == ">")       return std::make_shared<StrConstGT>(id, std::move(str_val));
+        if (op == ">=")      return std::make_shared<StrConstGE>(id, std::move(str_val));
+        if (op == "LIKE")     return std::make_shared<StrLike>(id, std::move(str_val));
+        if (op == "NOT LIKE") return std::make_shared<StrNotLike>(id, std::move(str_val));
     }
 
     throw std::runtime_error("Unsupported WHERE: " + arg);

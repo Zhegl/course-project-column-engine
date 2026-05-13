@@ -55,10 +55,23 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
     return *this;
 }
 
+ApiPipeline ApiPipeline::Offset(size_t arg) {
+    if (pending_order_col_) {
+        pending_offset_ = arg;
+    } else {
+        root_ = std::make_shared<OffsetOp>(root_, arg);
+    }
+    return *this;
+}
+
 ApiPipeline ApiPipeline::Limit(size_t arg) {
     if (pending_order_col_) {
         size_t col_idx = parser_.GetColumnId(*pending_order_col_);
-        root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg);
+        root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg + pending_offset_);
+        if (pending_offset_ > 0) {
+            root_ = std::make_shared<OffsetOp>(root_, pending_offset_);
+            pending_offset_ = 0;
+        }
         pending_order_col_.reset();
     } else {
         root_ = std::make_shared<LimitOp>(root_, arg);

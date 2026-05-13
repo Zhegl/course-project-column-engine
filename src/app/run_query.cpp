@@ -212,6 +212,97 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
                 .Limit(10)
                 .Select("SearchPhrase")
                 .Run();
+        case 31:
+            return engine.Api()
+                .Where("SearchPhrase <> ''")
+                .GroupByAggregate("SearchEngineID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                .Rename("COUNT(*)", "c")
+                .OrderBy("c DESC")
+                .Limit(10)
+                .Select("SearchEngineID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                .Run();
+        case 32:
+            return engine.Api()
+                .Where("SearchPhrase <> ''")
+                .GroupByAggregate("WatchID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                .Rename("COUNT(*)", "c")
+                .OrderBy("c DESC")
+                .Limit(10)
+                .Select("WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                .Run();
+        case 33:
+            return engine.Api()
+                .GroupByAggregate("WatchID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                .Rename("COUNT(*)", "c")
+                .OrderBy("c DESC")
+                .Limit(10)
+                .Select("WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                .Run();
+        case 34:
+            return engine.Api()
+                .GroupByAggregate("URL", "COUNT(*)")
+                .Rename("COUNT(*)", "c")
+                .OrderBy("c DESC")
+                .Limit(10)
+                .Select("URL", "c")
+                .Run();
+        case 36:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("DontCountHits = 0")
+                .Where("IsRefresh = 0")
+                .Where("URL <> ''")
+                .GroupByAggregate("URL", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Limit(10)
+                .Select("URL", "PageViews")
+                .Run();
+        case 37:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("DontCountHits = 0")
+                .Where("IsRefresh = 0")
+                .Where("Title <> ''")
+                .GroupByAggregate("Title", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Limit(10)
+                .Select("Title", "PageViews")
+                .Run();
+        case 38:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("IsRefresh = 0")
+                .Where("IsLink <> 0")
+                .Where("IsDownload = 0")
+                .GroupByAggregate("URL", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Offset(1000)
+                .Limit(10)
+                .Select("URL", "PageViews")
+                .Run();
+        case 42:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-14'")
+                .Where("EventDate <= '2013-07-15'")
+                .Where("IsRefresh = 0")
+                .Where("DontCountHits = 0")
+                .GroupByAggregate("strftime('%M', EventTime)", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("strftime('%M', EventTime) ASC")
+                .Offset(1000)
+                .Limit(10)
+                .Select("strftime('%M', EventTime)", "PageViews")
+                .Run();
         default:
             throw std::runtime_error("Query " + std::to_string(query_num) + " not implemented");
     }

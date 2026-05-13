@@ -164,6 +164,19 @@ std::optional<EngineBatch> LimitOp::GetNext() {
     return GetAllBatches(child_, limit_);
 }
 
+std::optional<EngineBatch> OffsetOp::GetNext() {
+    auto result = GetAllBatches(child_);
+    if (!result) {
+        return std::nullopt;
+    }
+    if (skipped_ < offset_) {
+        size_t to_skip = std::min(offset_ - skipped_, result->selection.size());
+        result->selection.erase(result->selection.begin(), result->selection.begin() + to_skip);
+        skipped_ += to_skip;
+    }
+    return result;
+}
+
 std::optional<EngineBatch> Sort::GetNext() {
     if (auto result = GetAllBatches(child_)) {
         const ColumnData& col = result->columns[col_idx_];

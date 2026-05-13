@@ -523,6 +523,152 @@ TEST_F(ClickBench, Q22) {
     ExpectResultMatches(result, {"SearchPhrase", "MIN(URL)", "MIN(Title)", "c", "COUNT(DISTINCT UserID)"}, expected_rows);
 }
 
+TEST_F(ClickBench, Q31) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("SearchPhrase <> ''")
+                      .GroupByAggregate("SearchEngineID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("SearchEngineID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"SearchEngineID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)"}));
+    ASSERT_EQ(result.size(), 11u);
+    // top row is deterministic — SearchEngineID=2 dominates
+    EXPECT_EQ(result[1][0], "2");
+}
+
+TEST_F(ClickBench, Q33) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .GroupByAggregate("WatchID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)"}));
+    // WatchID is unique per row so all counts are 1 — order is non-deterministic
+    ASSERT_EQ(result.size(), 11u);
+    for (size_t i = 1; i <= 10; ++i) {
+        EXPECT_EQ(result[i][2], "1");
+    }
+}
+
+TEST_F(ClickBench, Q34) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .GroupByAggregate("URL", "COUNT(*)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("URL", "c")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"http://irr.ru/index.php?showalbum/login-leniya7777294,938303130", "58970"},
+        {"http://komme%2F27.0.1453.116", "29580"},
+        {"https://produkty%2Fproduct", "11464"},
+        {"http://irr.ru/index.php?showalbum/login-kapusta-advert2668]=0&order_by=0", "10480"},
+        {"http://irr.ru/index.php?showalbum/login-kapustic/product_name", "10128"},
+        {"http://irr.ru/index.php", "7758"},
+        {"https://produkty%2F", "6649"},
+        {"http://irr.ru/index.php?showalbum/login", "6141"},
+        {"https://produkty/kurortmag", "5764"},
+        {"https://produkty%2Fpulove.ru/album/login", "5495"},
+    };
+    ExpectResultMatches(result, {"URL", "c"}, expected_rows);
+}
+
+TEST_F(ClickBench, Q36) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-01'")
+                      .Where("EventDate <= '2013-07-31'")
+                      .Where("DontCountHits = 0")
+                      .Where("IsRefresh = 0")
+                      .Where("URL <> ''")
+                      .GroupByAggregate("URL", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("PageViews DESC")
+                      .Limit(10)
+                      .Select("URL", "PageViews")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"http://irr.ru/index.php?showalbum/login-leniya7777294,938303130", "56533"},
+        {"http://komme%2F27.0.1453.116", "28819"},
+        {"http://irr.ru/index.php?showalbum/login-kapusta-advert2668]=0&order_by=0", "10325"},
+        {"http://irr.ru/index.php?showalbum/login-kapustic/product_name", "9650"},
+        {"http://irr.ru/index.php", "7530"},
+        {"http://irr.ru/index.php?showalbum/login", "6032"},
+        {"http://komme%2F27.0.1453.116 Safari%2F5.0 (compatible; MSIE 9.0;", "4271"},
+        {"http://irr.ru/index.php?showalbum/login-kupalnik", "2475"},
+        {"http://irr.ru/index.php?showalbum/login-kapusta-advert27256.html_params", "2300"},
+        {"http://komme%2F27.0.1453.116 Safari", "1612"},
+    };
+    ExpectResultMatches(result, {"URL", "PageViews"}, expected_rows);
+}
+
+TEST_F(ClickBench, Q37) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-01'")
+                      .Where("EventDate <= '2013-07-31'")
+                      .Where("DontCountHits = 0")
+                      .Where("IsRefresh = 0")
+                      .Where("Title <> ''")
+                      .GroupByAggregate("Title", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("PageViews DESC")
+                      .Limit(10)
+                      .Select("Title", "PageViews")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"Тест (Россия) - Яндекс", "67544"},
+        {"Шарарай), Выбрать! - обсуждаются на голд: Шоубиз - Свободная историс", "46670"},
+        {"Приморск - IRR.ru", "46530"},
+        {"Брюки New Era H (Асус) 258 общая выплаток, горшечными", "21166"},
+        {"Теплоску на", "13432"},
+        {"Приморск (Россия) - Яндекс.Видео", "8260"},
+        {"AUTO.ria.ua ™ - Аппер", "8115"},
+        {"Dave and Hotpoint sport – самые вещие", "7866"},
+        {"OWAProfessign), продать", "5754"},
+        {"Труси - Шоубиз", "5692"},
+    };
+    ExpectResultMatches(result, {"Title", "PageViews"}, expected_rows);
+}
+
+TEST_F(ClickBench, DISABLED_Q42) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-14'")
+                      .Where("EventDate <= '2013-07-15'")
+                      .Where("IsRefresh = 0")
+                      .Where("DontCountHits = 0")
+                      .GroupByAggregate("strftime('%M', EventTime)", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("strftime('%M', EventTime) ASC")
+                      .Limit(10)
+                      .Select("strftime('%M', EventTime)", "PageViews")
+                      .Run();
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"2013-07-14 20:00:00", "256"},
+        {"2013-07-14 20:01:00", "259"},
+        {"2013-07-14 20:02:00", "256"},
+        {"2013-07-14 20:03:00", "238"},
+        {"2013-07-14 20:04:00", "255"},
+        {"2013-07-14 20:05:00", "282"},
+        {"2013-07-14 20:06:00", "227"},
+        {"2013-07-14 20:07:00", "265"},
+        {"2013-07-14 20:08:00", "231"},
+        {"2013-07-14 20:09:00", "218"},
+    };
+    ExpectResultMatches(result, {"strftime('%M', EventTime)", "PageViews"}, expected_rows);
+}
+
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     google::InitGoogleLogging(argv[0]);

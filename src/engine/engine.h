@@ -83,6 +83,19 @@ private:
     size_t limit_;
 };
 
+class OffsetOp : public Operator {
+public:
+    OffsetOp(std::shared_ptr<Operator> child, size_t offset)
+        : child_(std::move(child)), offset_(offset) {
+    }
+    std::optional<EngineBatch> GetNext() override;
+
+private:
+    std::shared_ptr<Operator> child_;
+    size_t offset_;
+    size_t skipped_{0};
+};
+
 class Sort : public Operator {
 public:
     Sort(std::shared_ptr<Operator> child, size_t col_idx, bool reversed)

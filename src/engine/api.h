@@ -26,6 +26,7 @@ public:
     ApiPipeline Where(std::string arg);
     ApiPipeline Aggregate(std::string arg);
     ApiPipeline Limit(size_t arg);
+    ApiPipeline Offset(size_t arg);
     ApiPipeline OrderBy(std::string arg);
     ApiPipeline Rename(std::string from, std::string to);
     template <typename... Args>
@@ -54,5 +55,6 @@ private:
     std::shared_ptr<Scan> scanner_;
     std::optional<std::string> pending_order_col_;
     bool pending_order_reversed_ = false;
+    size_t pending_offset_ = 0;
 };
 }  // namespace column_engine

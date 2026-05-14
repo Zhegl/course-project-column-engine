@@ -213,13 +213,24 @@ std::optional<EngineBatch> TopK::GetNext() {
         size_t order;
     };
 
-    auto is_better = [&](const Row& lhs, const Row& rhs) {
-        const ColumnValue& l = lhs.values[col_idx_];
-        const ColumnValue& r = rhs.values[col_idx_];
-        if (LessColumnValue(l, r)) { return !reversed_; }
-        if (LessColumnValue(r, l)) { return reversed_; }
-        return lhs.order < rhs.order;
-    };
+    std::function<bool(const Row&, const Row&)> is_better;
+    if (col_idx_2_ != -1) {
+        is_better = [&](const Row& lhs, const Row& rhs) {
+            const ColumnValue& l = lhs.values[col_idx_];
+            const ColumnValue& r = rhs.values[col_idx_];
+            if (LessColumnValue(l, r)) { return !reversed_; }
+            if (LessColumnValue(r, l)) { return reversed_; }
+            return LessColumnValue(lhs.values[col_idx_2_], rhs.values[col_idx_2_]);
+        };
+    } else {
+        is_better = [&](const Row& lhs, const Row& rhs) {
+            const ColumnValue& l = lhs.values[col_idx_];
+            const ColumnValue& r = rhs.values[col_idx_];
+            if (LessColumnValue(l, r)) { return !reversed_; }
+            if (LessColumnValue(r, l)) { return reversed_; }
+            return lhs.order < rhs.order;
+        };
+    }
 
     auto heap_cmp = [&](const Row& lhs, const Row& rhs) {
         return is_better(lhs, rhs);

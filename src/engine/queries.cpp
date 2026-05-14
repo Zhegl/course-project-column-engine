@@ -62,7 +62,7 @@ void IntAvg::Next(EngineBatch& batch, RowIndex i) {
     ++count_;
 }
 ColumnData IntAvg::GetResult() {
-    return std::vector<int64_t>{static_cast<long>(count_ > 0 ? sum_ / count_ : 0)};
+    return std::vector<int64_t>{static_cast<int64_t>(count_ > 0 ? sum_ / count_ : 0)};
 }
 
 void StrMin::Next(EngineBatch& batch, RowIndex i) {

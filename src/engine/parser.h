@@ -16,6 +16,7 @@ public:
     explicit QueryParser(const Schema& schema);
     void SetSchema(Schema schema);
     Schema GetSchema();
+    Schema GetRealSchema();
     size_t GetColumnId(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);

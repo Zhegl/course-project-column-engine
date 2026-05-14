@@ -46,6 +46,10 @@ Schema QueryParser::GetSchema() {
     return cur_schema_;
 }
 
+Schema QueryParser::GetRealSchema() {
+    return schema_;
+}
+
 std::vector<size_t> QueryParser::GetColumnsForScan() {
     if (columns_for_scan_.empty()) {
         return {0};
@@ -262,6 +266,21 @@ std::pair<std::shared_ptr<AddColFun>, bool> QueryParser::ParseAdd(const std::str
         return {std::make_shared<StrLen>(id, col), true};
     }
 
+    // regexp_replace(col, 'pattern', 'replacement')
+    if (arg.starts_with("regexp_replace(")) {
+        size_t p = 15;  // skip "regexp_replace("
+        size_t col_end = arg.find(',', p);
+        std::string col = arg.substr(p, col_end - p);
+        size_t pat_start = arg.find('\'', col_end) + 1;
+        size_t pat_end   = arg.find('\'', pat_start);
+        std::string pattern = arg.substr(pat_start, pat_end - pat_start);
+        size_t rep_start = arg.find('\'', pat_end + 1) + 1;
+        size_t rep_end   = arg.find('\'', rep_start);
+        std::string replacement = arg.substr(rep_start, rep_end - rep_start);
+        size_t id = GetColumnId(col);
+        return {std::make_shared<RegexpReplace>(id, col, pattern, replacement), false};
+    }
+
     // strftime('fmt', col)
     if (arg.starts_with("strftime(")) {
         size_t fmt_start = arg.find('\'') + 1;
@@ -287,6 +306,36 @@ std::pair<std::shared_ptr<AddColFun>, bool> QueryParser::ParseAdd(const std::str
         int64_t delta     = -std::stoll(arg.substr(minus_pos + 3));
         size_t id = GetColumnId(col);
         return {std::make_shared<IntOffset>(id, col, delta), true};
+    }
+
+    // string literal: '' or 'value'
+    if (arg.size() >= 2 && arg.front() == '\'' && arg.back() == '\'') {
+        std::string val = arg.substr(1, arg.size() - 2);
+        return {std::make_shared<StrLiteral>(std::move(val)), false};
+    }
+
+    // bare column name — check cur_schema_ first (covers computed cols like tmp),
+    // then fall back to schema_ (registers the column for scan)
+    for (size_t id = 0; id < cur_schema_.columns.size(); ++id) {
+        if (cur_schema_.columns[id].name == arg) {
+            bool is_int = cur_schema_.columns[id].type->GetTypeName() == "int64";
+            if (is_int) {
+                return {std::make_shared<IntColRef>(id, arg), true};
+            } else {
+                return {std::make_shared<StrColRef>(id, arg), false};
+            }
+        }
+    }
+    for (size_t real_id = 0; real_id < schema_.columns.size(); ++real_id) {
+        if (schema_.columns[real_id].name == arg) {
+            size_t id = GetColumnId(arg);
+            bool is_int = cur_schema_.columns[id].type->GetTypeName() == "int64";
+            if (is_int) {
+                return {std::make_shared<IntColRef>(id, arg), true};
+            } else {
+                return {std::make_shared<StrColRef>(id, arg), false};
+            }
+        }
     }
 
     throw std::runtime_error("Unsupported Add expression: " + arg);

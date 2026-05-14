@@ -30,6 +30,7 @@ public:
     ApiPipeline OrderBy(std::string arg);
     ApiPipeline Rename(std::string from, std::string to);
     ApiPipeline Add(std::string arg);
+    ApiPipeline Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr);
     template <typename... Args>
     ApiPipeline GroupByAggregate(Args... args) {
         std::vector<std::string> all_args{std::string(args)...};
@@ -40,7 +41,15 @@ public:
     template <typename... Args>
     ApiPipeline Select(Args... args) {
         for (const auto& name : {std::string(args)...}) {
-            selected_columns_.push_back(parser_.GetColumnId(name));
+            if (name == "*") {
+                selected_columns_.clear();
+                for (auto col : parser_.GetRealSchema().columns) {
+                    selected_columns_.push_back(parser_.GetColumnId(col.name));
+                }
+                break;
+            } else {
+                selected_columns_.push_back(parser_.GetColumnId(name));
+            }
         }
         return *this;
     }
@@ -55,6 +64,7 @@ private:
     std::shared_ptr<Operator> root_;
     std::shared_ptr<Scan> scanner_;
     std::optional<std::string> pending_order_col_;
+    std::optional<std::string> pending_order_col2_;
     bool pending_order_reversed_ = false;
     size_t pending_offset_ = 0;
 };

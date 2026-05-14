@@ -127,10 +127,14 @@ public:
     TopK(std::shared_ptr<Operator> child, size_t col_idx, bool reversed, size_t limit)
         : child_(std::move(child)), col_idx_(col_idx), reversed_(reversed), limit_(limit) {
     }
+    TopK(std::shared_ptr<Operator> child, size_t col_idx, size_t col_idx_2, bool reversed, size_t limit)
+        : child_(std::move(child)), col_idx_(col_idx), col_idx_2_(col_idx_2), reversed_(reversed), limit_(limit) {
+    }
     std::optional<EngineBatch> GetNext() override;
 private:
     std::shared_ptr<Operator> child_;
     size_t col_idx_;
+    int64_t col_idx_2_{-1};
     bool reversed_;
     size_t limit_;
 };
@@ -144,9 +148,9 @@ public:
 
     std::optional<EngineBatch> GetNext() override {
         if (auto batch = child_->GetNext()) {
-            std::vector<T> new_col;
-            for (size_t i = 0; i <= batch->selection.back(); ++i) {
-                new_col.emplace_back(std::get<T>(fun_->Get(batch.value(), i)));
+            std::vector<T> new_col(batch->selection.back() + 1);
+            for (auto i : batch->selection) {
+                new_col[i] = std::get<T>(fun_->Get(batch.value(), i));
             }
             batch->columns.insert(batch->columns.begin() + col_idx_, std::move(new_col));
             batch->names.insert(batch->names.begin() + col_idx_, fun_->GetName());
@@ -158,6 +162,43 @@ public:
 private:
     std::shared_ptr<Operator> child_;
     std::shared_ptr<AddColFun> fun_;
+    size_t col_idx_;
+};
+
+
+template <typename T>
+class AddCase : public Operator {
+public:
+    AddCase(std::shared_ptr<Operator> child, std::shared_ptr<AddColFun> then_fun,
+            std::shared_ptr<AddColFun> else_fun, size_t col_idx,
+            std::shared_ptr<FilterPredicate> pred, std::string name)
+        : child_(std::move(child)), then_fun_(std::move(then_fun)),
+          else_fun_(std::move(else_fun)), col_idx_(col_idx),
+          pred_(std::move(pred)), name_(std::move(name)) {}
+
+    std::optional<EngineBatch> GetNext() override {
+        if (auto batch = child_->GetNext()) {
+            std::vector<T> new_col(batch->selection.back() + 1);
+            for (auto i : batch->selection) {
+                if (pred_->Check(*batch, i)) {
+                    new_col[i] = std::get<T>(then_fun_->Get(batch.value(), i));
+                } else {
+                    new_col[i] = std::get<T>(else_fun_->Get(batch.value(), i));
+                }
+            }
+            batch->columns.insert(batch->columns.begin() + col_idx_, std::move(new_col));
+            batch->names.insert(batch->names.begin() + col_idx_, name_);
+            return batch;
+        }
+        return std::nullopt;
+    }
+
+private:
+    std::shared_ptr<Operator> child_;
+    std::shared_ptr<AddColFun> then_fun_;
+    std::shared_ptr<AddColFun> else_fun_;
+    std::shared_ptr<FilterPredicate> pred_;
+    std::string name_;
     size_t col_idx_;
 };
 

@@ -41,17 +41,36 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
         throw std::runtime_error("wrong args for OrderBy");
     }
 
+    // split on ", " to get optional second sort key — skip commas inside parens
+    size_t comma = std::string::npos;
+    {
+        int depth = 0;
+        for (size_t i = 0; i + 1 < arg.size(); ++i) {
+            if (arg[i] == '(') { ++depth; }
+            else if (arg[i] == ')') { --depth; }
+            else if (depth == 0 && arg[i] == ',' && arg[i+1] == ' ') { comma = i; break; }
+        }
+    }
+    std::string first = (comma != std::string::npos) ? arg.substr(0, comma) : arg;
+    std::string second = (comma != std::string::npos) ? arg.substr(comma + 2) : "";
 
     size_t start = 4;
     bool reversed = false;
-
-    if (arg[arg.size() - 3] != 'A') { // TODO better parser
+    if (first[first.size() - 3] != 'A') {
         start = 5;
         reversed = true;
-    } 
-
-    pending_order_col_ = arg.substr(0, arg.size() - start);
+    }
+    pending_order_col_ = first.substr(0, first.size() - start);
     pending_order_reversed_ = reversed;
+
+    if (!second.empty()) {
+        // second key: strip trailing " ASC"/" DESC" (always ASC for tiebreak)
+        size_t start2 = (second.size() >= 5 && second[second.size() - 3] != 'A') ? 5 : 4;
+        pending_order_col2_ = second.substr(0, second.size() - start2);
+    } else {
+        pending_order_col2_.reset();
+    }
+
     return *this;
 }
 
@@ -67,7 +86,13 @@ ApiPipeline ApiPipeline::Offset(size_t arg) {
 ApiPipeline ApiPipeline::Limit(size_t arg) {
     if (pending_order_col_) {
         size_t col_idx = parser_.GetColumnId(*pending_order_col_);
-        root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg + pending_offset_);
+        if (pending_order_col2_) {
+            size_t col_idx2 = parser_.GetColumnId(*pending_order_col2_);
+            root_ = std::make_shared<TopK>(root_, col_idx, col_idx2, pending_order_reversed_, arg + pending_offset_);
+            pending_order_col2_.reset();
+        } else {
+            root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg + pending_offset_);
+        }
         if (pending_offset_ > 0) {
             root_ = std::make_shared<OffsetOp>(root_, pending_offset_);
             pending_offset_ = 0;
@@ -104,6 +129,29 @@ ApiPipeline ApiPipeline::Add(std::string arg) {
         meta.type = std::make_shared<ColumnTypeString>();
         new_schema.columns.push_back(std::move(meta));
         root_ = std::make_shared<AddCol<std::string>>(root_, func, insert_idx);
+    }
+    parser_.SetSchema(new_schema);
+    return *this;
+}
+
+ApiPipeline ApiPipeline::Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr) {
+    auto pred = parser_.ParseWhere(when_cond);
+    auto [then_fun, then_is_int] = parser_.ParseAdd(then_expr);
+    auto [else_fun, else_is_int] = parser_.ParseAdd(else_expr);
+    bool is_int = then_is_int || else_is_int;
+
+    Schema new_schema = parser_.GetSchema();
+    size_t insert_idx = new_schema.columns.size();
+    ColumnMetaData meta;
+    meta.name = name;
+    if (is_int) {
+        meta.type = std::make_shared<ColumnTypeInt64>();
+        new_schema.columns.push_back(std::move(meta));
+        root_ = std::make_shared<AddCase<int64_t>>(root_, then_fun, else_fun, insert_idx, pred, name);
+    } else {
+        meta.type = std::make_shared<ColumnTypeString>();
+        new_schema.columns.push_back(std::move(meta));
+        root_ = std::make_shared<AddCase<std::string>>(root_, then_fun, else_fun, insert_idx, pred, name);
     }
     parser_.SetSchema(new_schema);
     return *this;

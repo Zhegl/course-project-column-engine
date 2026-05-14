@@ -274,6 +274,7 @@ std::optional<EngineBatch> TopK::GetNext() {
     return result;
 }
 
+
 // Engine
 
 Engine::Engine(const std::string& path) : path_(path) {

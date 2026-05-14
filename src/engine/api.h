@@ -29,6 +29,7 @@ public:
     ApiPipeline Offset(size_t arg);
     ApiPipeline OrderBy(std::string arg);
     ApiPipeline Rename(std::string from, std::string to);
+    ApiPipeline Add(std::string arg);
     template <typename... Args>
     ApiPipeline GroupByAggregate(Args... args) {
         std::vector<std::string> all_args{std::string(args)...};

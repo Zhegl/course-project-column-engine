@@ -88,6 +88,27 @@ ApiPipeline ApiPipeline::Rename(std::string from, std::string to) {
     return *this;
 }
 
+ApiPipeline ApiPipeline::Add(std::string arg) {
+    auto [func, is_int] = parser_.ParseAdd(arg);
+
+    Schema new_schema = parser_.GetSchema();
+    size_t insert_idx = new_schema.columns.size();
+    ColumnMetaData meta;
+    meta.name = func->GetName();
+
+    if (is_int) {
+        meta.type = std::make_shared<ColumnTypeInt64>();
+        new_schema.columns.push_back(std::move(meta));
+        root_ = std::make_shared<AddCol<int64_t>>(root_, func, insert_idx);
+    } else {
+        meta.type = std::make_shared<ColumnTypeString>();
+        new_schema.columns.push_back(std::move(meta));
+        root_ = std::make_shared<AddCol<std::string>>(root_, func, insert_idx);
+    }
+    parser_.SetSchema(new_schema);
+    return *this;
+}
+
 ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates) {
     std::vector<size_t> group_column_ids;
     group_column_ids.reserve(group_columns.size());

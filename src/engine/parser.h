@@ -20,6 +20,8 @@ public:
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
     std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> ParseAggregate(const std::string& arg);
+    // returns {function, is_int_result}
+    std::pair<std::shared_ptr<AddColFun>, bool> ParseAdd(const std::string& arg);
 
 private:
     const Schema& schema_;

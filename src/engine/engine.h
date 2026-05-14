@@ -135,30 +135,31 @@ private:
     size_t limit_;
 };
 
-/*
-template <typename Comparator>
-class OrderBy : public Operator {
+template <typename T>
+class AddCol : public Operator {
 public:
-    OrderBy(std::shared_ptr<Operator> child, Comparator cmp, size_t limit, size_t offset)
-        : child_(std::move(child)),
-          cmp_(std::move(cmp)) {
+    AddCol(std::shared_ptr<Operator> child, std::shared_ptr<AddColFun> fun, size_t col_idx)
+        : child_(std::move(child)), fun_(std::move(fun)), col_idx_(col_idx) {
     }
 
     std::optional<EngineBatch> GetNext() override {
-
-        while (auto batch = child_->GetNext()) {
-            for (auto i : batch->selection) {
-                agg_.Next(*batch, i);
+        if (auto batch = child_->GetNext()) {
+            std::vector<T> new_col;
+            for (size_t i = 0; i <= batch->selection.back(); ++i) {
+                new_col.emplace_back(std::get<T>(fun_->Get(batch.value(), i)));
             }
+            batch->columns.insert(batch->columns.begin() + col_idx_, std::move(new_col));
+            batch->names.insert(batch->names.begin() + col_idx_, fun_->GetName());
+            return batch;
         }
-        return agg_.GetResult();
+        return std::nullopt;
     }
 
 private:
     std::shared_ptr<Operator> child_;
-    Comparator cmp_;
+    std::shared_ptr<AddColFun> fun_;
+    size_t col_idx_;
 };
-*/
 
 class ApiPipeline;
 

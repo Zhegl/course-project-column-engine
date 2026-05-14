@@ -87,28 +87,57 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
     const std::string& type_name = cur_schema_.columns[id].type->GetTypeName();
     if (type_name == "int64") {
         int64_t v = std::stoll(val);
-        if (op == "=")  return std::make_shared<IntConstEQ>(id, v);
-        if (op == "<>") return std::make_shared<IntConstNE>(id, v);
-        if (op == "<")  return std::make_shared<IntConstLT>(id, v);
-        if (op == "<=") return std::make_shared<IntConstLE>(id, v);
-        if (op == ">")  return std::make_shared<IntConstGT>(id, v);
-        if (op == ">=") return std::make_shared<IntConstGE>(id, v);
+        if (op == "=") {
+            return std::make_shared<IntConstEQ>(id, v);
+        }
+        if (op == "<>") {
+            return std::make_shared<IntConstNE>(id, v);
+        }
+        if (op == "<") {
+            return std::make_shared<IntConstLT>(id, v);
+        }
+        if (op == "<=") {
+            return std::make_shared<IntConstLE>(id, v);
+        }
+        if (op == ">") {
+            return std::make_shared<IntConstGT>(id, v);
+        }
+        if (op == ">=") {
+            return std::make_shared<IntConstGE>(id, v);
+        }
     } else if (type_name == "string") {
         std::string str_val = UnquoteStringLiteral(val);
-        if (op == "=")       return std::make_shared<StrConstEQ>(id, std::move(str_val));
-        if (op == "<>")      return std::make_shared<StrConstNE>(id, std::move(str_val));
-        if (op == "<")       return std::make_shared<StrConstLT>(id, std::move(str_val));
-        if (op == "<=")      return std::make_shared<StrConstLE>(id, std::move(str_val));
-        if (op == ">")       return std::make_shared<StrConstGT>(id, std::move(str_val));
-        if (op == ">=")      return std::make_shared<StrConstGE>(id, std::move(str_val));
-        if (op == "LIKE")     return std::make_shared<StrLike>(id, std::move(str_val));
-        if (op == "NOT LIKE") return std::make_shared<StrNotLike>(id, std::move(str_val));
+        if (op == "=") {
+            return std::make_shared<StrConstEQ>(id, std::move(str_val));
+        }
+        if (op == "<>") {
+            return std::make_shared<StrConstNE>(id, std::move(str_val));
+        }
+        if (op == "<") {
+            return std::make_shared<StrConstLT>(id, std::move(str_val));
+        }
+        if (op == "<=") {
+            return std::make_shared<StrConstLE>(id, std::move(str_val));
+        }
+        if (op == ">") {
+            return std::make_shared<StrConstGT>(id, std::move(str_val));
+        }
+        if (op == ">=") {
+            return std::make_shared<StrConstGE>(id, std::move(str_val));
+        }
+        if (op == "LIKE") {
+            return std::make_shared<StrLike>(id, std::move(str_val));
+        }
+        if (op == "NOT LIKE") {
+            return std::make_shared<StrNotLike>(id, std::move(str_val));
+        }
     }
 
     throw std::runtime_error("Unsupported WHERE: " + arg);
 }
 
-std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::ParseAggregate(const std::string& arg) {
+std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::ParseAggregate(
+    const std::string& arg) {
     std::vector<AggFactory> factories;
     std::vector<ColumnMetaData> agg_columns;
     size_t i = 0;
@@ -140,8 +169,8 @@ std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::Par
         }
 
         bool is_distinct = col.starts_with(kDistinctPrefix);
-        std::string raw_col = is_distinct ? col.substr(std::char_traits<char>::length(kDistinctPrefix))
-                                          : col;
+        std::string raw_col =
+            is_distinct ? col.substr(std::char_traits<char>::length(kDistinctPrefix)) : col;
 
         size_t id = GetColumnId(raw_col);
         bool is_str = cur_schema_.columns[id].type->GetTypeName() == "string";
@@ -186,6 +215,55 @@ std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::Par
     }
 
     return {std::move(factories), std::move(agg_columns)};
+}
+
+std::pair<std::shared_ptr<AddColFun>, bool> QueryParser::ParseAdd(const std::string& arg) {
+    // integer literal: "-123" or "42"
+    if (!arg.empty() && (std::isdigit(arg[0]) || (arg[0] == '-' && arg.size() > 1))) {
+        bool all_digits = true;
+        for (size_t i = (arg[0] == '-' ? 1 : 0); i < arg.size(); ++i) {
+            if (!std::isdigit(arg[i])) { all_digits = false; break; }
+        }
+        if (all_digits) {
+            return {std::make_shared<IntLiteral>(std::stoll(arg)), true};
+        }
+    }
+
+    // length(col)
+    if (arg.starts_with("length(") && arg.back() == ')') {
+        std::string col = arg.substr(7, arg.size() - 8);
+        size_t id = GetColumnId(col);
+        return {std::make_shared<StrLen>(id, col), true};
+    }
+
+    // strftime('fmt', col)
+    if (arg.starts_with("strftime(")) {
+        size_t fmt_start = arg.find('\'') + 1;
+        size_t fmt_end   = arg.find('\'', fmt_start);
+        std::string fmt  = arg.substr(fmt_start, fmt_end - fmt_start);
+        size_t col_start = arg.find(',', fmt_end) + 2;
+        std::string col  = arg.substr(col_start, arg.size() - col_start - 1);
+        size_t id = GetColumnId(col);
+        return {std::make_shared<Strftime>(id, col, fmt), false};
+    }
+
+    // col + N  or  col - N
+    auto plus_pos  = arg.rfind(" + ");
+    auto minus_pos = arg.rfind(" - ");
+    if (plus_pos != std::string::npos) {
+        std::string col   = arg.substr(0, plus_pos);
+        int64_t delta     = std::stoll(arg.substr(plus_pos + 3));
+        size_t id = GetColumnId(col);
+        return {std::make_shared<IntOffset>(id, col, delta), true};
+    }
+    if (minus_pos != std::string::npos) {
+        std::string col   = arg.substr(0, minus_pos);
+        int64_t delta     = -std::stoll(arg.substr(minus_pos + 3));
+        size_t id = GetColumnId(col);
+        return {std::make_shared<IntOffset>(id, col, delta), true};
+    }
+
+    throw std::runtime_error("Unsupported Add expression: " + arg);
 }
 
 }  // namespace column_engine

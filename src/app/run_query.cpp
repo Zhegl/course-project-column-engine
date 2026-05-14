@@ -6,7 +6,8 @@
 #include <stdexcept>
 #include <string>
 
-using namespace column_engine;
+using column_engine::Engine;
+using column_engine::QueryResult;
 
 static std::string CsvField(const std::string& s) {
     if (s.find(',') == std::string::npos &&
@@ -16,7 +17,9 @@ static std::string CsvField(const std::string& s) {
     }
     std::string out = "\"";
     for (char c : s) {
-        if (c == '"') out += '"';
+        if (c == '"') {
+            out += '"';
+        }
         out += c;
     }
     out += '"';
@@ -26,7 +29,9 @@ static std::string CsvField(const std::string& s) {
 static void WriteResult(const QueryResult& result, std::ostream& out) {
     for (const auto& row : result) {
         for (size_t i = 0; i < row.size(); ++i) {
-            if (i) out << ',';
+            if (i) {
+                out << ',';
+            }
             out << CsvField(row[i]);
         }
         out << '\n';
@@ -161,6 +166,7 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
                 .Run();
         case 18:
             return engine.Api()
+                .Add("strftime('%M', EventTime)")
                 .GroupByAggregate("UserID", "strftime('%M', EventTime)", "SearchPhrase", "COUNT(*)")
                 .OrderBy("COUNT(*) DESC")
                 .Limit(10)
@@ -211,6 +217,133 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
                 .OrderBy("SearchPhrase ASC")
                 .Limit(10)
                 .Select("SearchPhrase")
+                .Run();
+        case 26:
+            return engine.Api()
+                .Where("SearchPhrase <> ''")
+                .OrderBy("EventTime ASC")
+                .Limit(10)
+                .Select("SearchPhrase", "EventTime")
+                .Run();
+        case 29:
+            return engine.Api()
+                .Add("ResolutionWidth + 0")
+                .Add("ResolutionWidth + 1")
+                .Add("ResolutionWidth + 2")
+                .Add("ResolutionWidth + 3")
+                .Add("ResolutionWidth + 4")
+                .Add("ResolutionWidth + 5")
+                .Add("ResolutionWidth + 6")
+                .Add("ResolutionWidth + 7")
+                .Add("ResolutionWidth + 8")
+                .Add("ResolutionWidth + 9")
+                .Add("ResolutionWidth + 10")
+                .Add("ResolutionWidth + 11")
+                .Add("ResolutionWidth + 12")
+                .Add("ResolutionWidth + 13")
+                .Add("ResolutionWidth + 14")
+                .Add("ResolutionWidth + 15")
+                .Add("ResolutionWidth + 16")
+                .Add("ResolutionWidth + 17")
+                .Add("ResolutionWidth + 18")
+                .Add("ResolutionWidth + 19")
+                .Add("ResolutionWidth + 20")
+                .Add("ResolutionWidth + 21")
+                .Add("ResolutionWidth + 22")
+                .Add("ResolutionWidth + 23")
+                .Add("ResolutionWidth + 24")
+                .Add("ResolutionWidth + 25")
+                .Add("ResolutionWidth + 26")
+                .Add("ResolutionWidth + 27")
+                .Add("ResolutionWidth + 28")
+                .Add("ResolutionWidth + 29")
+                .Add("ResolutionWidth + 30")
+                .Add("ResolutionWidth + 31")
+                .Add("ResolutionWidth + 32")
+                .Add("ResolutionWidth + 33")
+                .Add("ResolutionWidth + 34")
+                .Add("ResolutionWidth + 35")
+                .Add("ResolutionWidth + 36")
+                .Add("ResolutionWidth + 37")
+                .Add("ResolutionWidth + 38")
+                .Add("ResolutionWidth + 39")
+                .Add("ResolutionWidth + 40")
+                .Add("ResolutionWidth + 41")
+                .Add("ResolutionWidth + 42")
+                .Add("ResolutionWidth + 43")
+                .Add("ResolutionWidth + 44")
+                .Add("ResolutionWidth + 45")
+                .Add("ResolutionWidth + 46")
+                .Add("ResolutionWidth + 47")
+                .Add("ResolutionWidth + 48")
+                .Add("ResolutionWidth + 49")
+                .Add("ResolutionWidth + 50")
+                .Add("ResolutionWidth + 51")
+                .Add("ResolutionWidth + 52")
+                .Add("ResolutionWidth + 53")
+                .Add("ResolutionWidth + 54")
+                .Add("ResolutionWidth + 55")
+                .Add("ResolutionWidth + 56")
+                .Add("ResolutionWidth + 57")
+                .Add("ResolutionWidth + 58")
+                .Add("ResolutionWidth + 59")
+                .Add("ResolutionWidth + 60")
+                .Add("ResolutionWidth + 61")
+                .Add("ResolutionWidth + 62")
+                .Add("ResolutionWidth + 63")
+                .Add("ResolutionWidth + 64")
+                .Add("ResolutionWidth + 65")
+                .Add("ResolutionWidth + 66")
+                .Add("ResolutionWidth + 67")
+                .Add("ResolutionWidth + 68")
+                .Add("ResolutionWidth + 69")
+                .Add("ResolutionWidth + 70")
+                .Add("ResolutionWidth + 71")
+                .Add("ResolutionWidth + 72")
+                .Add("ResolutionWidth + 73")
+                .Add("ResolutionWidth + 74")
+                .Add("ResolutionWidth + 75")
+                .Add("ResolutionWidth + 76")
+                .Add("ResolutionWidth + 77")
+                .Add("ResolutionWidth + 78")
+                .Add("ResolutionWidth + 79")
+                .Add("ResolutionWidth + 80")
+                .Add("ResolutionWidth + 81")
+                .Add("ResolutionWidth + 82")
+                .Add("ResolutionWidth + 83")
+                .Add("ResolutionWidth + 84")
+                .Add("ResolutionWidth + 85")
+                .Add("ResolutionWidth + 86")
+                .Add("ResolutionWidth + 87")
+                .Add("ResolutionWidth + 88")
+                .Add("ResolutionWidth + 89")
+                .Aggregate("SUM(ResolutionWidth + 0), SUM(ResolutionWidth + 1), SUM(ResolutionWidth + 2), SUM(ResolutionWidth + 3), SUM(ResolutionWidth + 4), SUM(ResolutionWidth + 5), SUM(ResolutionWidth + 6), SUM(ResolutionWidth + 7), SUM(ResolutionWidth + 8), SUM(ResolutionWidth + 9), SUM(ResolutionWidth + 10), SUM(ResolutionWidth + 11), SUM(ResolutionWidth + 12), SUM(ResolutionWidth + 13), SUM(ResolutionWidth + 14), SUM(ResolutionWidth + 15), SUM(ResolutionWidth + 16), SUM(ResolutionWidth + 17), SUM(ResolutionWidth + 18), SUM(ResolutionWidth + 19), SUM(ResolutionWidth + 20), SUM(ResolutionWidth + 21), SUM(ResolutionWidth + 22), SUM(ResolutionWidth + 23), SUM(ResolutionWidth + 24), SUM(ResolutionWidth + 25), SUM(ResolutionWidth + 26), SUM(ResolutionWidth + 27), SUM(ResolutionWidth + 28), SUM(ResolutionWidth + 29), SUM(ResolutionWidth + 30), SUM(ResolutionWidth + 31), SUM(ResolutionWidth + 32), SUM(ResolutionWidth + 33), SUM(ResolutionWidth + 34), SUM(ResolutionWidth + 35), SUM(ResolutionWidth + 36), SUM(ResolutionWidth + 37), SUM(ResolutionWidth + 38), SUM(ResolutionWidth + 39), SUM(ResolutionWidth + 40), SUM(ResolutionWidth + 41), SUM(ResolutionWidth + 42), SUM(ResolutionWidth + 43), SUM(ResolutionWidth + 44), SUM(ResolutionWidth + 45), SUM(ResolutionWidth + 46), SUM(ResolutionWidth + 47), SUM(ResolutionWidth + 48), SUM(ResolutionWidth + 49), SUM(ResolutionWidth + 50), SUM(ResolutionWidth + 51), SUM(ResolutionWidth + 52), SUM(ResolutionWidth + 53), SUM(ResolutionWidth + 54), SUM(ResolutionWidth + 55), SUM(ResolutionWidth + 56), SUM(ResolutionWidth + 57), SUM(ResolutionWidth + 58), SUM(ResolutionWidth + 59), SUM(ResolutionWidth + 60), SUM(ResolutionWidth + 61), SUM(ResolutionWidth + 62), SUM(ResolutionWidth + 63), SUM(ResolutionWidth + 64), SUM(ResolutionWidth + 65), SUM(ResolutionWidth + 66), SUM(ResolutionWidth + 67), SUM(ResolutionWidth + 68), SUM(ResolutionWidth + 69), SUM(ResolutionWidth + 70), SUM(ResolutionWidth + 71), SUM(ResolutionWidth + 72), SUM(ResolutionWidth + 73), SUM(ResolutionWidth + 74), SUM(ResolutionWidth + 75), SUM(ResolutionWidth + 76), SUM(ResolutionWidth + 77), SUM(ResolutionWidth + 78), SUM(ResolutionWidth + 79), SUM(ResolutionWidth + 80), SUM(ResolutionWidth + 81), SUM(ResolutionWidth + 82), SUM(ResolutionWidth + 83), SUM(ResolutionWidth + 84), SUM(ResolutionWidth + 85), SUM(ResolutionWidth + 86), SUM(ResolutionWidth + 87), SUM(ResolutionWidth + 88), SUM(ResolutionWidth + 89)")
+                .Run();
+        case 35:
+            return engine.Api()
+                .Add("ClientIP - 1")
+                .Add("ClientIP - 2")
+                .Add("ClientIP - 3")
+                .GroupByAggregate("ClientIP", "ClientIP - 1", "ClientIP - 2", "ClientIP - 3", "COUNT(*)")
+                .Rename("COUNT(*)", "c")
+                .OrderBy("c DESC")
+                .Limit(10)
+                .Select("ClientIP", "ClientIP - 1", "ClientIP - 2", "ClientIP - 3", "c")
+                .Run();
+        case 39:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("IsRefresh = 0")
+                .Where("IsLink <> 0")
+                .Where("IsDownload = 0")
+                .GroupByAggregate("URL", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Offset(1000)
+                .Limit(10)
+                .Select("URL", "PageViews")
                 .Run();
         case 31:
             return engine.Api()
@@ -333,7 +466,9 @@ int main(int argc, char** argv) {
         for (size_t i = 1; i < result.size(); ++i) {
             const auto& row = result[i];
             for (size_t j = 0; j < row.size(); ++j) {
-                if (j) out << ',';
+                if (j) {
+                    out << ',';
+                }
                 out << CsvField(row[j]);
             }
             out << '\n';

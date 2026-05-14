@@ -221,9 +221,21 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
         case 26:
             return engine.Api()
                 .Where("SearchPhrase <> ''")
-                .OrderBy("EventTime ASC")
+                .OrderBy("SearchPhrase ASC")
                 .Limit(10)
-                .Select("SearchPhrase", "EventTime")
+                .Select("SearchPhrase")
+                .Run();
+        case 28:
+            return engine.Api()
+                .Where("URL <> ''")
+                .Add("length(URL)")
+                .GroupByAggregate("CounterID", "AVG(length(URL)), COUNT(*), MIN(URL)")
+                .Rename("AVG(length(URL))", "l")
+                .Rename("COUNT(*)", "c")
+                .Where("c > 100000")
+                .OrderBy("l DESC")
+                .Limit(25)
+                .Select("CounterID", "l", "c", "MIN(URL)")
                 .Run();
         case 29:
             return engine.Api()
@@ -330,21 +342,6 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
                 .Limit(10)
                 .Select("ClientIP", "ClientIP - 1", "ClientIP - 2", "ClientIP - 3", "c")
                 .Run();
-        case 39:
-            return engine.Api()
-                .Where("CounterID = 62")
-                .Where("EventDate >= '2013-07-01'")
-                .Where("EventDate <= '2013-07-31'")
-                .Where("IsRefresh = 0")
-                .Where("IsLink <> 0")
-                .Where("IsDownload = 0")
-                .GroupByAggregate("URL", "COUNT(*)")
-                .Rename("COUNT(*)", "PageViews")
-                .OrderBy("PageViews DESC")
-                .Offset(1000)
-                .Limit(10)
-                .Select("URL", "PageViews")
-                .Run();
         case 31:
             return engine.Api()
                 .Where("SearchPhrase <> ''")
@@ -421,6 +418,36 @@ static QueryResult RunQuery(Engine& engine, int query_num) {
                 .Offset(1000)
                 .Limit(10)
                 .Select("URL", "PageViews")
+                .Run();
+        case 40:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("IsRefresh = 0")
+                .Where("TraficSourceID IN (-1, 6)")
+                .Where("RefererHash = 3594120000172545465")
+                .GroupByAggregate("URLHash", "EventDate", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Offset(100)
+                .Limit(10)
+                .Select("URLHash", "EventDate", "PageViews")
+                .Run();
+        case 41:
+            return engine.Api()
+                .Where("CounterID = 62")
+                .Where("EventDate >= '2013-07-01'")
+                .Where("EventDate <= '2013-07-31'")
+                .Where("IsRefresh = 0")
+                .Where("TraficSourceID IN (-1, 6)")
+                .Where("RefererHash = 3594120000172545465")
+                .GroupByAggregate("URLHash", "EventDate", "COUNT(*)")
+                .Rename("COUNT(*)", "PageViews")
+                .OrderBy("PageViews DESC")
+                .Offset(100)
+                .Limit(10)
+                .Select("URLHash", "EventDate", "PageViews")
                 .Run();
         case 42:
             return engine.Api()

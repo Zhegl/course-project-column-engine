@@ -84,6 +84,26 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
         val.push_back(arg[i++]);
     }
 
+    if (op == "IN") {
+        std::vector<int64_t> vals;
+        size_t j = 0;
+        while (j < val.size()) {
+            while (j < val.size() && (val[j] == '(' || val[j] == ')' || val[j] == ',' || val[j] == ' ')) {
+                ++j;
+            }
+            if (j >= val.size()) {
+                break;
+            }
+            size_t k = j;
+            while (k < val.size() && val[k] != ',' && val[k] != ')') {
+                ++k;
+            }
+            vals.push_back(std::stoll(val.substr(j, k - j)));
+            j = k;
+        }
+        return std::make_shared<IntConstIN>(id, std::move(vals));
+    }
+
     const std::string& type_name = cur_schema_.columns[id].type->GetTypeName();
     if (type_name == "int64") {
         int64_t v = std::stoll(val);
@@ -157,7 +177,13 @@ std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::Par
         }
         ++i;
         std::string col;
-        while (i < arg.size() && arg[i] != ')') {
+        int depth = 0;
+        while (i < arg.size() && (arg[i] != ')' || depth > 0)) {
+            if (arg[i] == '(') {
+                ++depth;
+            } else if (arg[i] == ')') {
+                --depth;
+            }
             col.push_back(arg[i++]);
         }
         ++i;

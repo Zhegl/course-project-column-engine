@@ -281,8 +281,8 @@ Engine::Engine(const std::string& path) : path_(path) {
     auto [batch_meta, schema] = GetMeta(path_);
     batch_meta_ = std::move(batch_meta);
     schema_ = std::move(schema);
-    LOG(INFO) << "Engine started, " << schema_.columns.size() << " columns, "
-              << batch_meta_.size() / schema_.columns.size() << " row groups";
+    // LOG(INFO) << "Engine started, " << schema_.columns.size() << " columns, "
+    //           << batch_meta_.size() / schema_.columns.size() << " row groups";
 }
 
 std::shared_ptr<Scan> Engine::MakeScan() {

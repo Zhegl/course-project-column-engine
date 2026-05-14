@@ -261,6 +261,18 @@ private:
     size_t id_a_; std::string const_b_;
 };
 
+class IntConstIN : public FilterPredicate {
+public:
+    IntConstIN(size_t id_a, std::vector<int64_t> values)
+        : id_a_(id_a), values_(values.begin(), values.end()) {}
+    bool Check(EngineBatch& batch, RowIndex i) override {
+        return values_.count(std::get<std::vector<int64_t>>(batch.columns[id_a_])[i]) > 0;
+    }
+private:
+    size_t id_a_;
+    std::unordered_set<int64_t> values_;
+};
+
 class StrLike : public FilterPredicate {
 public:
     StrLike(size_t id_a, std::string pattern);

@@ -528,19 +528,40 @@ TEST_F(ClickBench, Q26) {
     column_engine::Engine engine("col.col");
     auto result = engine.Api()
                       .Where("SearchPhrase <> ''")
-                      .OrderBy("EventTime ASC")
+                      .OrderBy("SearchPhrase ASC")
                       .Limit(10)
-                      .Select("SearchPhrase", "EventTime")
+                      .Select("SearchPhrase")
                       .Run();
-    ASSERT_EQ(result.size(), 11u);
-    ASSERT_EQ(result[0], (std::vector<std::string>{"SearchPhrase", "EventTime"}));
-    for (size_t i = 2; i < result.size(); ++i) {
-        EXPECT_GE(result[i][1], result[i - 1][1]);
-    }
-    EXPECT_EQ(result[1][1], "2013-07-14 20:00:03");
-    EXPECT_EQ(result[2][1], "2013-07-14 20:00:03");
-    EXPECT_EQ(result[3][1], "2013-07-14 20:00:05");
-    EXPECT_EQ(result[4][1], "2013-07-14 20:00:05");
+    const std::vector<std::vector<std::string>> expected_rows = {
+        {"'exis disco ryder injected cuda 7269"},
+        {"'kbnyjuj gjhnf gtgthm vfibys row 3 ставе"},
+        {"'kbnyjuj gjhnf gtgthm vfibys row 3 ставе"},
+        {"'kbnyst exfcnm vekmnbdfhrf"},
+        {"'kbnyst exfcnm vekmnbdfhrf"},
+        {"(http://kommedium=cpc&utm_source=main происход"},
+        {"+100 дизелькатровский стой"},
+        {"+100 дизелькатровский стой"},
+        {"+100500 4.5 отзывы"},
+        {"+100500 4.5 отзывы"},
+    };
+    ExpectResultMatches(result, {"SearchPhrase"}, expected_rows);
+}
+
+TEST_F(ClickBench, Q28) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("URL <> ''")
+                      .Add("length(URL)")
+                      .GroupByAggregate("CounterID", "AVG(length(URL)), COUNT(*), MIN(URL)")
+                      .Rename("AVG(length(URL))", "l")
+                      .Rename("COUNT(*)", "c")
+                      .Where("c > 100000")
+                      .OrderBy("l DESC")
+                      .Limit(25)
+                      .Select("CounterID", "l", "c", "MIN(URL)")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"CounterID", "l", "c", "MIN(URL)"}));
+    ASSERT_LE(result.size(), 26u);
 }
 
 TEST_F(ClickBench, Q29) {
@@ -607,6 +628,20 @@ TEST_F(ClickBench, Q31) {
     ASSERT_EQ(result.size(), 11u);
     // top row is deterministic — SearchEngineID=2 dominates
     EXPECT_EQ(result[1][0], "2");
+}
+
+TEST_F(ClickBench, Q32) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("SearchPhrase <> ''")
+                      .GroupByAggregate("WatchID", "ClientIP", "COUNT(*), SUM(IsRefresh), AVG(ResolutionWidth)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c DESC")
+                      .Limit(10)
+                      .Select("WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"WatchID", "ClientIP", "c", "SUM(IsRefresh)", "AVG(ResolutionWidth)"}));
+    ASSERT_LE(result.size(), 11u);
 }
 
 TEST_F(ClickBench, Q33) {
@@ -737,6 +772,67 @@ TEST_F(ClickBench, Q37) {
     ExpectResultMatches(result, {"Title", "PageViews"}, expected_rows);
 }
 
+TEST_F(ClickBench, Q38) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-01'")
+                      .Where("EventDate <= '2013-07-31'")
+                      .Where("IsRefresh = 0")
+                      .Where("IsLink <> 0")
+                      .Where("IsDownload = 0")
+                      .GroupByAggregate("URL", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("PageViews DESC")
+                      .Offset(1000)
+                      .Limit(10)
+                      .Select("URL", "PageViews")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"URL", "PageViews"}));
+    ASSERT_LE(result.size(), 11u);
+}
+
+TEST_F(ClickBench, Q40) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-01'")
+                      .Where("EventDate <= '2013-07-31'")
+                      .Where("IsRefresh = 0")
+                      .Where("TraficSourceID IN (-1, 6)")
+                      .Where("RefererHash = 3594120000172545465")
+                      .GroupByAggregate("URLHash", "EventDate", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("PageViews DESC")
+                      .Offset(100)
+                      .Limit(10)
+                      .Select("URLHash", "EventDate", "PageViews")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"URLHash", "EventDate", "PageViews"}));
+    ASSERT_LE(result.size(), 11u);
+}
+
+TEST_F(ClickBench, Q41) {
+    column_engine::Engine engine("col.col");
+    auto result = engine.Api()
+                      .Where("CounterID = 62")
+                      .Where("EventDate >= '2013-07-01'")
+                      .Where("EventDate <= '2013-07-31'")
+                      .Where("IsRefresh = 0")
+                      .Where("TraficSourceID IN (-1, 6)")
+                      .Where("RefererHash = 3594120000172545465")
+                      .GroupByAggregate("URLHash", "EventDate", "COUNT(*)")
+                      .Rename("COUNT(*)", "PageViews")
+                      .OrderBy("PageViews DESC")
+                      .Offset(100)
+                      .Limit(10)
+                      .Select("URLHash", "EventDate", "PageViews")
+                      .Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"URLHash", "EventDate", "PageViews"}));
+    ASSERT_LE(result.size(), 11u);
+}
+
+
 TEST_F(ClickBench, Q42) {
     column_engine::Engine engine("col.col");
     auto result = engine.Api()
@@ -766,7 +862,6 @@ TEST_F(ClickBench, Q42) {
     };
     ExpectResultMatches(result, {"strftime('%M', EventTime)", "PageViews"}, expected_rows);
 }
-
 
 int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);

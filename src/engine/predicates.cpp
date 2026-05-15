@@ -25,12 +25,56 @@ bool StrConstNE::Check(EngineBatch& batch, RowIndex i) {
     return GetStrAt(batch.columns[id_a_], i) != const_b_;
 }
 
+std::vector<RowIndex> StrConstNE::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+    std::vector<RowIndex> result;
+    result.reserve(selection.size());
+    const auto& col = batch.columns[id_a_];
+    if (std::holds_alternative<std::vector<std::string_view>>(col)) {
+        const auto& sv_col = std::get<std::vector<std::string_view>>(col);
+        for (auto i : selection) {
+            if (sv_col[i] != const_b_) {
+                result.push_back(i);
+            }
+        }
+    } else {
+        const auto& s_col = std::get<std::vector<std::string>>(col);
+        for (auto i : selection) {
+            if (s_col[i] != const_b_) {
+                result.push_back(i);
+            }
+        }
+    }
+    return result;
+}
+
 StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
     : id_a_(id_a), const_b_(std::move(const_b)) {
 }
 
 bool StrConstEQ::Check(EngineBatch& batch, RowIndex i) {
     return GetStrAt(batch.columns[id_a_], i) == const_b_;
+}
+
+std::vector<RowIndex> StrConstEQ::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+    std::vector<RowIndex> result;
+    result.reserve(selection.size());
+    const auto& col = batch.columns[id_a_];
+    if (std::holds_alternative<std::vector<std::string_view>>(col)) {
+        const auto& sv_col = std::get<std::vector<std::string_view>>(col);
+        for (auto i : selection) {
+            if (sv_col[i] == const_b_) {
+                result.push_back(i);
+            }
+        }
+    } else {
+        const auto& s_col = std::get<std::vector<std::string>>(col);
+        for (auto i : selection) {
+            if (s_col[i] == const_b_) {
+                result.push_back(i);
+            }
+        }
+    }
+    return result;
 }
 
 static bool LikeMatch(const std::string_view str, const std::string& pattern) {

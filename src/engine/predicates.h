@@ -18,6 +18,16 @@ inline std::string_view GetStrAt(const ColumnData& col, RowIndex i) {
 class FilterPredicate {
 public:
     virtual bool Check(EngineBatch& batch, RowIndex i) = 0;
+    virtual std::vector<RowIndex> CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+        std::vector<RowIndex> result;
+        result.reserve(selection.size());
+        for (auto i : selection) {
+            if (Check(batch, i)) {
+                result.push_back(i);
+            }
+        }
+        return result;
+    }
     virtual ~FilterPredicate() = default;
 };
 
@@ -43,6 +53,7 @@ class StrConstNE : public FilterPredicate {
 public:
     StrConstNE(size_t id_a, std::string const_b);
     bool Check(EngineBatch& batch, RowIndex i) override;
+    std::vector<RowIndex> CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) override;
 private:
     size_t id_a_;
     std::string const_b_;
@@ -52,6 +63,7 @@ class StrConstEQ : public FilterPredicate {
 public:
     StrConstEQ(size_t id_a, std::string const_b);
     bool Check(EngineBatch& batch, RowIndex i) override;
+    std::vector<RowIndex> CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) override;
 private:
     size_t id_a_;
     std::string const_b_;

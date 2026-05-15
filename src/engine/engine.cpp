@@ -77,13 +77,7 @@ std::optional<EngineBatch> Scan::GetNext() {
 
 std::optional<EngineBatch> Filter::GetNext() {
     while (auto batch = child_->GetNext()) {
-        std::vector<RowIndex> new_selection;
-        for (auto i : batch->selection) {
-            if (pred_->Check(*batch, i)) {
-                new_selection.emplace_back(i);
-            }
-        }
-        batch->selection = std::move(new_selection);
+        batch->selection = pred_->CheckBatch(*batch, batch->selection);
         if (!batch->selection.empty()) {
             return batch;
         }

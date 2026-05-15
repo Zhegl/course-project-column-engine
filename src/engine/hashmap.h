@@ -1,9 +1,7 @@
 #pragma once
 
-#include <array>
 #include <cstddef>
 #include <functional>
-#include <unordered_map>
 #include <vector>
 #include "types/types.h"
 
@@ -30,7 +28,7 @@ public:
                 is_used_[hash] = true;
                 size_++;
 
-                if (size_ * 10 > map_.size() * 7) {
+                if (size_ * 10 > map_.size() * 5) {
                     Rebuild();
                     return operator[](key);
                 }
@@ -77,6 +75,26 @@ public:
         bool operator!=(const Iterator& o) const { return idx != o.idx; }
     };
 
+    size_t Capacity() const { return map_.size(); }
+    bool IsUsed(size_t idx) const { return is_used_[idx]; }
+    Slot<T, Y>& GetSlot(size_t idx) { return map_[idx]; }
+
+    size_t FirstUsed() const {
+        size_t idx = 0;
+        while (idx < map_.size() && !is_used_[idx]) {
+            ++idx;
+        }
+        return idx;
+    }
+
+    size_t NextUsed(size_t idx) const {
+        ++idx;
+        while (idx < map_.size() && !is_used_[idx]) {
+            ++idx;
+        }
+        return idx;
+    }
+
     Iterator Begin() {
         size_t idx = 0;
         while (idx < map_.size() && !is_used_[idx]) {
@@ -115,6 +133,14 @@ private:
     std::vector<char> is_used_;
     std::vector<Slot<T, Y>> map_;
     size_t size_{0};
+};
+
+struct IntHash {
+    size_t operator()(int64_t v) const { return std::hash<int64_t>{}(v); }
+};
+
+struct StrHash {
+    size_t operator()(const std::string& v) const { return std::hash<std::string>{}(v); }
 };
 
 struct GroupKey {

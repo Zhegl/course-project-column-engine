@@ -116,7 +116,6 @@ bool StrConstEQ::Check(EngineBatch& batch, RowIndex i) {
 }
 
 static bool LikeMatch(const std::string& str, const std::string& pattern) {
-    // split pattern by '%' and check each part appears in order
     std::vector<std::string_view> parts;
     size_t start = 0;
     bool anchored_start = !pattern.empty() && pattern[0] != '%';
@@ -170,7 +169,6 @@ bool StrNotLike::Check(EngineBatch& batch, RowIndex i) {
 
 ColumnValue Strftime::Get(EngineBatch& batch, RowIndex i) {
     const std::string& s = std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
-    // parse "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD"
     struct tm t{};
     if (s.size() >= 19) {
         t.tm_year = std::stoi(s.substr(0, 4)) - 1900;

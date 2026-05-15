@@ -594,6 +594,248 @@ TEST_F(EngineTest, CountDistinctIntAfterFilter) {
     ExpectResultMatches(result, {"COUNT(DISTINCT score)"}, {{"5"}});
 }
 
+// --- IN ---
+
+TEST_F(EngineTest, WhereIntIn) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Where("id IN (2, 5, 8)").Select("id").Run();
+    ASSERT_EQ(result.size(), 4u);
+    std::set<std::string> ids;
+    for (size_t i = 1; i < result.size(); ++i) { ids.insert(result[i][0]); }
+    EXPECT_EQ(ids, (std::set<std::string>{"2", "5", "8"}));
+}
+
+TEST_F(EngineTest, WhereIntInEmpty) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Where("id IN (99, 100)").Select("id").Run();
+    ASSERT_EQ(result.size(), 1u);  // header only
+}
+
+TEST_F(EngineTest, WhereIntInSingle) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Where("id IN (7)").Select("id", "score").Run();
+    ExpectResultMatches(result, {"id", "score"}, {{"7", "70"}});
+}
+
+// --- Case ---
+
+TEST_F(EngineTest, CaseBasic) {
+    column_engine::Engine engine("test.col");
+    // CASE WHEN group = 'A' THEN score ELSE 0 → A rows keep score, B rows get 0
+    auto result = engine.Api()
+                      .Case("adjusted", "group = 'A'", "score", "0")
+                      .Aggregate("SUM(adjusted)")
+                      .Select("SUM(adjusted)")
+                      .Run();
+    // SUM only over A: 10+20+30+40+50 = 150
+    ExpectResultMatches(result, {"SUM(adjusted)"}, {{"150"}});
+}
+
+TEST_F(EngineTest, CaseStrResult) {
+    column_engine::Engine engine("test.col");
+    // CASE WHEN id = 1 THEN 'first' ELSE 'other'
+    auto result = engine.Api()
+                      .Case("label", "id = 1", "'first'", "'other'")
+                      .Where("id <= 2")
+                      .Select("id", "label")
+                      .Run();
+    ExpectResultMatches(result, {"id", "label"}, {{"1", "first"}, {"2", "other"}});
+}
+
+TEST_F(EngineTest, CaseChained) {
+    column_engine::Engine engine("test.col");
+    // two Cases chained: first marks A, second checks id=1 within tmp
+    auto result = engine.Api()
+                      .Case("tmp", "group = 'A'", "name", "''")
+                      .Case("final", "id = 1", "tmp", "''")
+                      .Where("id <= 3")
+                      .Select("id", "final")
+                      .Run();
+    ExpectResultMatches(result, {"id", "final"}, {{"1", "item_1"}, {"2", ""}, {"3", ""}});
+}
+
+TEST_F(EngineTest, CaseColRef) {
+    column_engine::Engine engine("test.col");
+    // CASE WHEN id <= 5 THEN score ELSE id → A rows: score, B rows: id
+    auto result = engine.Api()
+                      .Case("val", "group = 'A'", "score", "id")
+                      .Where("id = 1")
+                      .Select("val")
+                      .Run();
+    // id=1 is group A → val = score = 10
+    ExpectResultMatches(result, {"val"}, {{"10"}});
+}
+
+TEST_F(EngineTest, CaseNoMatch) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .Case("x", "id = 999", "score", "0")
+                      .Aggregate("SUM(x)")
+                      .Select("SUM(x)")
+                      .Run();
+    ExpectResultMatches(result, {"SUM(x)"}, {{"0"}});
+}
+
+// --- OrderBy two keys ---
+
+TEST_F(EngineTest, TopKTwoKeys) {
+    column_engine::Engine engine("test.col");
+    // ORDER BY group ASC, id ASC — within group A, lowest ids first
+    auto result = engine.Api()
+                      .OrderBy("group ASC, id ASC")
+                      .Limit(4)
+                      .Select("group", "id")
+                      .Run();
+    ASSERT_EQ(result.size(), 5u);
+    // first two rows: group A, id=1 then id=2
+    EXPECT_EQ(result[1][0], "A");
+    EXPECT_EQ(result[1][1], "1");
+    EXPECT_EQ(result[2][0], "A");
+    EXPECT_EQ(result[2][1], "2");
+}
+
+TEST_F(EngineTest, SortTwoKeysTiebreak) {
+    column_engine::Engine engine("test.col");
+    // GROUP BY group gives 2 rows with equal count=5 — second key breaks tie
+    auto result = engine.Api()
+                      .GroupByAggregate("group", "COUNT(*)")
+                      .Rename("COUNT(*)", "c")
+                      .OrderBy("c ASC, group ASC")
+                      .Limit(2)
+                      .Select("group", "c")
+                      .Run();
+    ASSERT_EQ(result.size(), 3u);
+    // both counts are 5, tiebreak by group name: A < B
+    EXPECT_EQ(result[1][0], "A");
+    EXPECT_EQ(result[2][0], "B");
+}
+
+// --- Select * ---
+
+TEST_F(EngineTest, SelectStar) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Select("*").Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"id", "score", "name", "group"}));
+    ASSERT_EQ(result.size(), 11u);
+}
+
+TEST_F(EngineTest, SelectStarAfterFilter) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Where("id = 1").Select("*").Run();
+    ASSERT_EQ(result[0], (std::vector<std::string>{"id", "score", "name", "group"}));
+    ASSERT_EQ(result.size(), 2u);
+    EXPECT_EQ(result[1], (std::vector<std::string>{"1", "10", "item_1", "A"}));
+}
+
+// --- HAVING (Where after GroupBy) ---
+
+TEST_F(EngineTest, HavingCount) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .GroupByAggregate("group", "COUNT(*)")
+                      .Rename("COUNT(*)", "c")
+                      .Where("c > 5")
+                      .Select("group", "c")
+                      .Run();
+    // both groups have count=5, so nothing passes c>5
+    ASSERT_EQ(result.size(), 1u);
+}
+
+TEST_F(EngineTest, HavingSum) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .GroupByAggregate("group", "SUM(score)")
+                      .Rename("SUM(score)", "total")
+                      .Where("total > 200")
+                      .Select("group", "total")
+                      .Run();
+    // A=150, B=400 → only B passes
+    ExpectResultMatches(result, {"group", "total"}, {{"B", "400"}});
+}
+
+// --- RegexpReplace ---
+
+TEST_F(EngineTest, AddRegexpReplace) {
+    column_engine::Engine engine("test.col");
+    // replace "item_" prefix with "x_"
+    auto result = engine.Api()
+                      .Add("regexp_replace(name, '^item_', 'x_')")
+                      .Where("id = 3")
+                      .Select("regexp_replace(name, '^item_', 'x_')")
+                      .Run();
+    ExpectResultMatches(result, {"regexp_replace(name, '^item_', 'x_')"}, {{"x_3"}});
+}
+
+TEST_F(EngineTest, AddRegexpReplaceNoMatch) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .Add("regexp_replace(name, '^zzz', 'x')")
+                      .Where("id = 1")
+                      .Select("regexp_replace(name, '^zzz', 'x')")
+                      .Run();
+    // pattern doesn't match → string unchanged
+    ExpectResultMatches(result, {"regexp_replace(name, '^zzz', 'x')"}, {{"item_1"}});
+}
+
+// --- StrColRef / bare column in Add ---
+
+TEST_F(EngineTest, AddBareStringCol) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .Case("copy", "id = 1", "name", "''")
+                      .Where("id <= 2")
+                      .Select("id", "copy")
+                      .Run();
+    ExpectResultMatches(result, {"id", "copy"}, {{"1", "item_1"}, {"2", ""}});
+}
+
+TEST_F(EngineTest, AddBareIntCol) {
+    column_engine::Engine engine("test.col");
+    // Case with bare int column as then-expr
+    auto result = engine.Api()
+                      .Case("copy_score", "group = 'A'", "score", "0")
+                      .Where("id = 3")
+                      .Select("copy_score")
+                      .Run();
+    ExpectResultMatches(result, {"copy_score"}, {{"30"}});
+}
+
+// --- Limit / Offset edge cases ---
+
+TEST_F(EngineTest, LimitMoreThanRows) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Limit(100).Select("id").Run();
+    ASSERT_EQ(result.size(), 11u);  // only 10 rows
+}
+
+TEST_F(EngineTest, OffsetBeyondEnd) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().OrderBy("id ASC").Offset(20).Limit(5).Select("id").Run();
+    ASSERT_EQ(result.size(), 1u);  // header only
+}
+
+TEST_F(EngineTest, LimitZero) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api().Limit(0).Select("id").Run();
+    ASSERT_EQ(result.size(), 1u);  // header only
+}
+
+// --- StringLiteral in Add ---
+
+TEST_F(EngineTest, AddStringLiteral) {
+    column_engine::Engine engine("test.col");
+    auto result = engine.Api()
+                      .Case("tag", "group = 'A'", "'yes'", "'no'")
+                      .GroupByAggregate("tag", "COUNT(*)")
+                      .Select("tag", "COUNT(*)")
+                      .Run();
+    ASSERT_EQ(result.size(), 3u);
+    std::map<std::string, std::string> counts;
+    for (size_t i = 1; i < result.size(); ++i) { counts[result[i][0]] = result[i][1]; }
+    EXPECT_EQ(counts["yes"], "5");
+    EXPECT_EQ(counts["no"], "5");
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {

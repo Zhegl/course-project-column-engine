@@ -40,8 +40,6 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
     if (arg.size() < 4) {
         throw std::runtime_error("wrong args for OrderBy");
     }
-
-    // split on ", " to get optional second sort key — skip commas inside parens
     size_t comma = std::string::npos;
     {
         int depth = 0;
@@ -64,7 +62,6 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
     pending_order_reversed_ = reversed;
 
     if (!second.empty()) {
-        // second key: strip trailing " ASC"/" DESC" (always ASC for tiebreak)
         size_t start2 = (second.size() >= 5 && second[second.size() - 3] != 'A') ? 5 : 4;
         pending_order_col2_ = second.substr(0, second.size() - start2);
     } else {

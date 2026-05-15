@@ -27,7 +27,7 @@ size_t QueryParser::GetColumnId(const std::string& name) {
             return id;
         }
     }
-    // not in cur_schema_ yet — look up in the source schema and register for scan
+    
     for (size_t real_id = 0; real_id < schema_.columns.size(); ++real_id) {
         if (name == schema_.columns[real_id].name) {
             columns_for_scan_.push_back(real_id);

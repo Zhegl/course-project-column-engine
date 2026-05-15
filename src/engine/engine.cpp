@@ -5,16 +5,12 @@
 #include <io/file_reader.h>
 #include <glog/logging.h>
 #include <algorithm>
-#include <cstdint>
 #include <memory>
-#include <numeric>
 #include <optional>
-#include <type_traits>
 #include <vector>
 #include "batch.h"
-#include "queries.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 namespace {
 
@@ -164,6 +160,19 @@ std::optional<EngineBatch> LimitOp::GetNext() {
     return GetAllBatches(child_, limit_);
 }
 
+std::optional<EngineBatch> OffsetOp::GetNext() {
+    auto result = GetAllBatches(child_);
+    if (!result) {
+        return std::nullopt;
+    }
+    if (skipped_ < offset_) {
+        size_t to_skip = std::min(offset_ - skipped_, result->selection.size());
+        result->selection.erase(result->selection.begin(), result->selection.begin() + to_skip);
+        skipped_ += to_skip;
+    }
+    return result;
+}
+
 std::optional<EngineBatch> Sort::GetNext() {
     if (auto result = GetAllBatches(child_)) {
         const ColumnData& col = result->columns[col_idx_];
@@ -200,13 +209,24 @@ std::optional<EngineBatch> TopK::GetNext() {
         size_t order;
     };
 
-    auto is_better = [&](const Row& lhs, const Row& rhs) {
-        const ColumnValue& l = lhs.values[col_idx_];
-        const ColumnValue& r = rhs.values[col_idx_];
-        if (LessColumnValue(l, r)) { return !reversed_; }
-        if (LessColumnValue(r, l)) { return reversed_; }
-        return lhs.order < rhs.order;
-    };
+    std::function<bool(const Row&, const Row&)> is_better;
+    if (col_idx_2_ != -1) {
+        is_better = [&](const Row& lhs, const Row& rhs) {
+            const ColumnValue& l = lhs.values[col_idx_];
+            const ColumnValue& r = rhs.values[col_idx_];
+            if (LessColumnValue(l, r)) { return !reversed_; }
+            if (LessColumnValue(r, l)) { return reversed_; }
+            return LessColumnValue(lhs.values[col_idx_2_], rhs.values[col_idx_2_]);
+        };
+    } else {
+        is_better = [&](const Row& lhs, const Row& rhs) {
+            const ColumnValue& l = lhs.values[col_idx_];
+            const ColumnValue& r = rhs.values[col_idx_];
+            if (LessColumnValue(l, r)) { return !reversed_; }
+            if (LessColumnValue(r, l)) { return reversed_; }
+            return lhs.order < rhs.order;
+        };
+    }
 
     auto heap_cmp = [&](const Row& lhs, const Row& rhs) {
         return is_better(lhs, rhs);
@@ -261,14 +281,15 @@ std::optional<EngineBatch> TopK::GetNext() {
     return result;
 }
 
+
 // Engine
 
 Engine::Engine(const std::string& path) : path_(path) {
     auto [batch_meta, schema] = GetMeta(path_);
     batch_meta_ = std::move(batch_meta);
     schema_ = std::move(schema);
-    LOG(INFO) << "Engine started, " << schema_.columns.size() << " columns, "
-              << batch_meta_.size() / schema_.columns.size() << " row groups";
+    // LOG(INFO) << "Engine started, " << schema_.columns.size() << " columns, "
+    //           << batch_meta_.size() / schema_.columns.size() << " row groups";
 }
 
 std::shared_ptr<Scan> Engine::MakeScan() {
@@ -299,4 +320,4 @@ ApiPipeline Engine::Api() {
     return ApiPipeline(*this, schema_);
 }
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

@@ -1,6 +1,8 @@
 add_library(engine_lib
     engine.cpp
-    queries.cpp
+    aggregators.cpp
+    predicates.cpp
+    expressions.cpp
     api.cpp
     parser.cpp
 )

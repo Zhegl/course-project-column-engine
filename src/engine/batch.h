@@ -4,7 +4,7 @@
 #include <vector>
 #include <types/types.h>
 
-namespace column_engine {
+namespace column_engine::internal {
 using RowIndex = uint16_t;
 
 struct EngineBatch {
@@ -12,4 +12,4 @@ struct EngineBatch {
     std::vector<ColumnData> columns;
     std::vector<RowIndex> selection;
 };
-}  // namespace column_engine
+}  // namespace column_engine::internal

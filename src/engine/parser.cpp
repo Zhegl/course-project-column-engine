@@ -5,7 +5,7 @@
 #include <vector>
 #include "types/types.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 namespace {
 
@@ -341,4 +341,4 @@ std::pair<std::shared_ptr<AddColFun>, bool> QueryParser::ParseAdd(const std::str
     throw std::runtime_error("Unsupported Add expression: " + arg);
 }
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

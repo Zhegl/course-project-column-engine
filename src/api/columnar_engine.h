@@ -8,11 +8,14 @@ namespace column_engine {
 
 using QueryResult = std::vector<std::vector<std::string>>;
 
-class ApiPipelineImpl;
+namespace internal {
+class ApiPipeline;
+class Engine;
+}  // namespace internal
 
 class ApiPipeline {
 public:
-    explicit ApiPipeline(std::unique_ptr<ApiPipelineImpl> impl);
+    explicit ApiPipeline(std::unique_ptr<internal::ApiPipeline> impl);
     ApiPipeline(ApiPipeline&&) noexcept;
     ApiPipeline& operator=(ApiPipeline&&) noexcept;
     ~ApiPipeline();
@@ -46,23 +49,23 @@ private:
     ApiPipeline GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates);
     ApiPipeline SelectImpl(std::vector<std::string> columns);
 
-    std::unique_ptr<ApiPipelineImpl> impl_;
+    std::unique_ptr<internal::ApiPipeline> impl_;
 };
-
-class ColumnEngineImpl;
 
 class ColumnEngine {
 public:
     explicit ColumnEngine(const std::string& path);
     ~ColumnEngine();
-
     ColumnEngine(ColumnEngine&&) noexcept;
     ColumnEngine& operator=(ColumnEngine&&) noexcept;
 
     ApiPipeline Api();
 
 private:
-    std::unique_ptr<ColumnEngineImpl> impl_;
+    std::unique_ptr<internal::Engine> impl_;
 };
+
+using Engine = ColumnEngine;
+using QueryResult = std::vector<std::vector<std::string>>;
 
 }  // namespace column_engine

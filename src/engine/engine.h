@@ -8,10 +8,11 @@
 #include <engine/batch.h>
 #include <engine/hashmap.h>
 #include <glog/logging.h>
-#include <engine/queries.h>
+#include <engine/predicates.h>
+#include <engine/expressions.h>
 #include <engine/parser.h>
 
-namespace column_engine {
+namespace column_engine::internal {
 
 
 class Operator {
@@ -218,4 +219,4 @@ private:
     std::vector<BatchMetaData> batch_meta_;
 };
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

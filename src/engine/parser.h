@@ -1,13 +1,14 @@
 #pragma once
 #include <functional>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
-#include "queries.h"
+#include "engine/aggregators.h"
+#include "engine/expressions.h"
+#include "engine/predicates.h"
 #include "types/types.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 using AggFactory = std::function<std::shared_ptr<Aggregator>()>;
 
@@ -30,4 +31,4 @@ private:
     std::vector<size_t> columns_for_scan_;
 };
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

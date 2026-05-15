@@ -4,11 +4,10 @@
 #include <cstddef>
 #include <functional>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 #include "types/types.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 struct GroupKey {
     std::vector<ColumnValue> values;
@@ -73,5 +72,5 @@ private:
     MapType data_;
 };
 
-}  // namespace column_engine
+}  // namespace column_engine::internal
 // NOLINTEND(readability-identifier-naming)

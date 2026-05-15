@@ -5,16 +5,12 @@
 #include <io/file_reader.h>
 #include <glog/logging.h>
 #include <algorithm>
-#include <cstdint>
 #include <memory>
-#include <numeric>
 #include <optional>
-#include <type_traits>
 #include <vector>
 #include "batch.h"
-#include "queries.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 namespace {
 
@@ -324,4 +320,4 @@ ApiPipeline Engine::Api() {
     return ApiPipeline(*this, schema_);
 }
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

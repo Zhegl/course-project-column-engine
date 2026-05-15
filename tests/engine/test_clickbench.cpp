@@ -1,8 +1,7 @@
 #include <gtest/gtest.h>
 #include <convert/convert.h>
-#include <engine/engine.h>
+#include <api/columnar_engine.h>
 #include <glog/logging.h>
-#include "api.h"
 
 namespace {
 

@@ -4,10 +4,9 @@
 #include <stdexcept>
 #include <string>
 #include "engine.h"
-#include "queries.h"
 #include "types/types.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 ApiPipeline::ApiPipeline(Engine& engine, const Schema& schema)
     : engine_(engine), parser_(schema) {
@@ -217,4 +216,4 @@ QueryResult ApiPipeline::Run() {
     return result;
 }
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

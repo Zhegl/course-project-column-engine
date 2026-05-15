@@ -5,11 +5,10 @@
 #include <string>
 #include <vector>
 #include "types/types.h"
-#include <engine/queries.h>
 #include <engine/batch.h>
 #include <engine/parser.h>
 
-namespace column_engine {
+namespace column_engine::internal {
 
 using QueryResult = std::vector<std::vector<std::string>>;
 
@@ -53,6 +52,17 @@ public:
         }
         return *this;
     }
+    ApiPipeline SelectVec(const std::vector<std::string>& columns) {
+        for (const auto& name : columns) {
+            Select(name);
+        }
+        return *this;
+    }
+    ApiPipeline GroupByAggregateVec(std::vector<std::string> all_args) {
+        std::string aggregates = all_args.back();
+        all_args.pop_back();
+        return GroupByAggregateImpl(std::move(all_args), std::move(aggregates));
+    }
     QueryResult Run();
 
 private:
@@ -68,4 +78,4 @@ private:
     bool pending_order_reversed_ = false;
     size_t pending_offset_ = 0;
 };
-}  // namespace column_engine
+}  // namespace column_engine::internal

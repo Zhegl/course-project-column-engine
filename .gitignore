@@ -11,3 +11,5 @@
 *.dylib
 run-clang-format.py
 /tmp
+commands.sh
+env.sh

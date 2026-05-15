@@ -1,13 +1,14 @@
 #pragma once
 #include <functional>
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
-#include "queries.h"
+#include "engine/aggregators.h"
+#include "engine/expressions.h"
+#include "engine/predicates.h"
 #include "types/types.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 using AggFactory = std::function<std::shared_ptr<Aggregator>()>;
 
@@ -16,10 +17,13 @@ public:
     explicit QueryParser(const Schema& schema);
     void SetSchema(Schema schema);
     Schema GetSchema();
+    Schema GetRealSchema();
     size_t GetColumnId(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
     std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> ParseAggregate(const std::string& arg);
+    // returns {function, is_int_result}
+    std::pair<std::shared_ptr<AddColFun>, bool> ParseAdd(const std::string& arg);
 
 private:
     const Schema& schema_;
@@ -27,4 +31,4 @@ private:
     std::vector<size_t> columns_for_scan_;
 };
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

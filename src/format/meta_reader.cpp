@@ -53,8 +53,8 @@ std::pair<std::vector<BatchMetaData>, Schema> GetMeta(const std::string& path) {
     size_t batches_amount = reader.Read<uint64_t>();
     size_t columns_amount = reader.Read<uint64_t>();
 
-    LOG(INFO) << "meta_start: " << meta_start << " batches_amount: " << batches_amount
-              << " columns_amount: " << columns_amount;
+    // LOG(INFO) << "meta_start: " << meta_start << " batches_amount: " << batches_amount
+    //           << " columns_amount: " << columns_amount;
 
     if (meta_start > input_size) {
         throw std::runtime_error(path + " is broken");

@@ -3,7 +3,7 @@
 #include <string>
 #include "batch.h"
 
-namespace column_engine {
+namespace column_engine::internal {
 
 inline bool LessColumnValue(const ColumnValue& lhs, const ColumnValue& rhs) {
     return std::visit(
@@ -91,4 +91,4 @@ inline std::string ColumnValueToStringAt(const ColumnData& column, RowIndex i) {
         column);
 }
 
-}  // namespace column_engine
+}  // namespace column_engine::internal

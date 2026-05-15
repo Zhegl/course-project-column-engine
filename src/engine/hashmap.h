@@ -58,7 +58,7 @@ public:
     }
 
     struct Iterator {
-        const std::vector<bool>* is_used;
+        const std::vector<char>* is_used;
         std::vector<Slot<T, Y>>* map;
         size_t idx;
 
@@ -91,7 +91,7 @@ public:
 
 private:
     void Rebuild() {
-        std::vector<bool> is_used = std::vector<bool>(map_.size() * 2);
+        std::vector<char> is_used(map_.size() * 2, 0);
         std::vector<Slot<T, Y>> map = std::vector<Slot<T, Y>>(map_.size() * 2);
 
         for (size_t i = 0; i < map_.size(); ++i) {
@@ -112,7 +112,7 @@ private:
         map_ = std::move(map);
     }
 
-    std::vector<bool> is_used_;
+    std::vector<char> is_used_;
     std::vector<Slot<T, Y>> map_;
     size_t size_{0};
 };

@@ -68,8 +68,8 @@ private:
     std::vector<size_t> group_columns_;
     std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
-    HashMap<std::vector<std::shared_ptr<Aggregator>>> groups_;
-    HashMap<std::vector<std::shared_ptr<Aggregator>>>::iterator cur_;
+    GroupHashMap<std::vector<std::shared_ptr<Aggregator>>> groups_;
+    GroupHashMap<std::vector<std::shared_ptr<Aggregator>>>::Iterator cur_;
 };
 
 class LimitOp : public Operator {

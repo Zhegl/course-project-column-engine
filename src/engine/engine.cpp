@@ -120,28 +120,28 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     constexpr size_t kBatchSize = 1024;
     if (!ready_) {
         Run();
-        cur_ = groups_.begin();
+        cur_ = groups_.Begin();
     }
-    if (cur_ == groups_.end()) {
+    if (cur_ == groups_.End()) {
         return std::nullopt;
     }
 
     EngineBatch result;
     result.names = group_names_;
-    for (const auto& agg : cur_->second) {
+    for (const auto& agg : cur_->val) {
         result.names.push_back(agg->GetName());
     }
-    
-    for (const auto& v : cur_->first.values) {
+
+    for (const auto& v : cur_->key.values) {
         result.columns.push_back(MakeColumnData(v));
     }
-    for (const auto& agg : cur_->second) {
+    for (const auto& agg : cur_->val) {
         result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
     }
 
     size_t count = 0;
-    while (cur_ != groups_.end() && count < kBatchSize) {
-        const auto& [key, aggs] = *cur_;
+    while (cur_ != groups_.End() && count < kBatchSize) {
+        const auto& [key, aggs] = std::tie(cur_->key, cur_->val);
         for (size_t i = 0; i < key.values.size(); ++i) {
             AppendColumnValue(result.columns[i], key.values[i]);
         }

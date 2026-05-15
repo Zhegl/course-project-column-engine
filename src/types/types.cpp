@@ -108,18 +108,16 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
     size_t raw_size = final_offset - header_size;
-    std::string raw;
-    raw.resize(raw_size);
-    reader.Read(raw.data(), raw_size);
+    const char* raw = reader.Peek(raw_size);
 
     ColumnTypeInt64 helper;
     auto data = helper.GetBatch(0, reader);
 
-    std::vector<std::string> result;
+    std::vector<std::string_view> result;
     result.reserve(n_words);
     for (size_t i = 0; i < n_words; ++i) {
         auto pos = static_cast<size_t>(std::get<std::vector<int64_t>>(data)[i]);
-        result.push_back(raw.substr(idx[pos], idx[pos + 1] - idx[pos]));
+        result.emplace_back(raw + idx[pos], idx[pos + 1] - idx[pos]);
     }
 
     return result;

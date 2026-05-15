@@ -19,7 +19,7 @@ ColumnData IntCountDistinct::GetResult() {
 }
 
 void StrCountDistinct::Next(EngineBatch& batch, RowIndex i) {
-    values_.insert(std::get<std::vector<std::string>>(batch.columns[col_idx_])[i]);
+    values_.emplace(GetStrAt(batch.columns[col_idx_], i));
 }
 
 ColumnData StrCountDistinct::GetResult() {
@@ -62,7 +62,7 @@ ColumnData IntAvg::GetResult() {
 }
 
 void StrMin::Next(EngineBatch& batch, RowIndex i) {
-    const auto& v = std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
+    const auto& v = GetStrAt(batch.columns[col_idx_], i);
     if (!min_ || v < *min_) {
         min_ = v;
     }
@@ -72,7 +72,7 @@ ColumnData StrMin::GetResult() {
 }
 
 void StrMax::Next(EngineBatch& batch, RowIndex i) {
-    const auto& v = std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
+    const auto& v = GetStrAt(batch.columns[col_idx_], i);
     if (!max_ || v > *max_) {
         max_ = v;
     }

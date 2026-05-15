@@ -1,4 +1,5 @@
 #include "engine/predicates.h"
+#include <string_view>
 
 namespace column_engine::internal {
 
@@ -21,7 +22,7 @@ StrConstNE::StrConstNE(size_t id_a, std::string const_b)
 }
 
 bool StrConstNE::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<std::string>>(batch.columns[id_a_])[i] != const_b_;
+    return GetStrAt(batch.columns[id_a_], i) != const_b_;
 }
 
 StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
@@ -29,10 +30,10 @@ StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
 }
 
 bool StrConstEQ::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<std::string>>(batch.columns[id_a_])[i] == const_b_;
+    return GetStrAt(batch.columns[id_a_], i) == const_b_;
 }
 
-static bool LikeMatch(const std::string& str, const std::string& pattern) {
+static bool LikeMatch(const std::string_view str, const std::string& pattern) {
     std::vector<std::string_view> parts;
     size_t start = 0;
     bool anchored_start = !pattern.empty() && pattern[0] != '%';
@@ -77,7 +78,7 @@ StrLike::StrLike(size_t id_a, std::string pattern) : id_a_(id_a), infix_(std::mo
 }
 
 bool StrLike::Check(EngineBatch& batch, RowIndex i) {
-    return LikeMatch(std::get<std::vector<std::string>>(batch.columns[id_a_])[i], infix_);
+    return LikeMatch(GetStrAt(batch.columns[id_a_], i), infix_);
 }
 
 StrNotLike::StrNotLike(size_t id_a, std::string pattern) : inner_(id_a, std::move(pattern)) {

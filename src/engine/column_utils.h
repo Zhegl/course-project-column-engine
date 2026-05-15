@@ -19,7 +19,14 @@ inline bool LessColumnValue(const ColumnValue& lhs, const ColumnValue& rhs) {
 }
 
 inline ColumnValue GetColumnValue(const ColumnData& column, RowIndex i) {
-    return std::visit([&](const auto& data) -> ColumnValue { return data[i]; }, column);
+    return std::visit([&](const auto& data) -> ColumnValue {
+        using T = typename std::decay_t<decltype(data)>::value_type;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            return std::string(data[i]);
+        } else {
+            return data[i];
+        }
+    }, column);
 }
 
 inline ColumnData MakeColumnData(const ColumnValue& value) {
@@ -44,7 +51,11 @@ inline void AppendColumnValue(ColumnData& column, const ColumnValue& value) {
     std::visit(
         [&](auto& data) {
             using T = typename std::decay_t<decltype(data)>::value_type;
-            data.push_back(std::get<T>(value));
+            if constexpr (std::is_same_v<T, std::string_view>) {
+                data.push_back(std::string_view(std::get<std::string>(value)));
+            } else {
+                data.push_back(std::get<T>(value));
+            }
         },
         column);
 }
@@ -85,7 +96,7 @@ inline std::string ColumnValueToStringAt(const ColumnData& column, RowIndex i) {
             if constexpr (std::is_same_v<T, int64_t>) {
                 return std::to_string(values[i]);
             } else {
-                return values[i];
+                return std::string(values[i]);
             }
         },
         column);

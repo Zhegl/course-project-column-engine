@@ -2,6 +2,7 @@
 #include <regex>
 #include <string>
 #include "engine/batch.h"
+#include "engine/predicates.h"
 #include "types/types.h"
 
 namespace column_engine::internal {
@@ -66,7 +67,11 @@ public:
         : col_idx_(col_idx), col_name_(std::move(col_name)) {
     }
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
-        return std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
+        const auto& col = batch.columns[col_idx_];
+        if (std::holds_alternative<std::vector<std::string_view>>(col)) {
+            return std::string(std::get<std::vector<std::string_view>>(col)[i]);
+        }
+        return std::get<std::vector<std::string>>(col)[i];
     }
     std::string GetName() override {
         return col_name_;
@@ -105,7 +110,7 @@ public:
     }
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
         return static_cast<int64_t>(
-            std::get<std::vector<std::string>>(batch.columns[col_idx_])[i].size());
+            GetStrAt(batch.columns[col_idx_], i).size());
     }
     std::string GetName() override {
         return "length(" + col_name_ + ")";
@@ -127,8 +132,8 @@ public:
           replacement_(std::move(replacement)) {
     }
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
-        const std::string& s = std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
-        return std::regex_replace(s, re_, replacement_);
+        auto sv = GetStrAt(batch.columns[col_idx_], i);
+        return std::regex_replace(std::string(sv), re_, replacement_);
     }
     std::string GetName() override {
         return "regexp_replace(" + col_name_ + ", '" + pattern_ + "', '" + replacement_ + "')";

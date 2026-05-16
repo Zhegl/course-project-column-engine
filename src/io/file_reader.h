@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <string>
+#include <sys/mman.h>
 
 namespace column_engine {
 
@@ -34,6 +35,10 @@ public:
         const char* ptr = base_ + pos_;
         pos_ += size;
         return ptr;
+    }
+
+    void Prefetch(size_t offset, size_t size) {
+        madvise(base_ + offset, size, MADV_WILLNEED);
     }
 
 private:

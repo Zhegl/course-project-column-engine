@@ -57,6 +57,11 @@ std::optional<EngineBatch> Scan::GetNext() {
     size_t cols = schema_.columns.size();
     size_t rg = current_row_group_++;
 
+    for (size_t col : columns_) {
+        const auto& meta = batch_meta_[rg * cols + col];
+        reader_.Prefetch(meta.offset, meta.size);
+    }
+
     EngineBatch result;
     for (size_t col : columns_) {
         const auto& meta = batch_meta_[rg * cols + col];

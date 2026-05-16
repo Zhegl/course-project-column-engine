@@ -207,7 +207,7 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t /*size*/, FileReader& reader) {
+ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;
@@ -243,15 +243,36 @@ ColumnData ColumnTypeInt64::GetBatch(size_t /*size*/, FileReader& reader) {
             count += n;
         }
     } else {
-        size_t block = 0;
-        uint64_t val = 0;
-        for (size_t i = 0; i < n_values; ++i) {
-            if (block + 1 < blocks && i >= block_start[block + 1]) {
-                ++block;
-                val = 0;
+        for (size_t block = 0; block < blocks; ++block) {
+            size_t n = (block + 1 < blocks ? block_start[block + 1] : n_values) - block_start[block];
+            uint8_t sz = read_sz[block];
+            int64_t base = min_val[block];
+            const char* ptr = reader.Peek(n * sz);
+            switch (sz) {
+            case 1:
+                for (size_t i = 0; i < n; ++i) {
+                    result.push_back(base + static_cast<uint8_t>(ptr[i]));
+                }
+                break;
+            case 2:
+                for (size_t i = 0; i < n; ++i) {
+                    uint16_t v; memcpy(&v, ptr + i * 2, 2);
+                    result.push_back(base + v);
+                }
+                break;
+            case 4:
+                for (size_t i = 0; i < n; ++i) {
+                    uint32_t v; memcpy(&v, ptr + i * 4, 4);
+                    result.push_back(base + v);
+                }
+                break;
+            case 8:
+                for (size_t i = 0; i < n; ++i) {
+                    uint64_t v; memcpy(&v, ptr + i * 8, 8);
+                    result.push_back(base + v);
+                }
+                break;
             }
-            reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
-            result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
         }
     }
 

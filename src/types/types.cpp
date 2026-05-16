@@ -99,11 +99,8 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     uint16_t n_uwords = reader.Read<uint16_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
 
-    std::vector<uint32_t> idx;
-    idx.reserve(n_uwords + 1);
-    for (size_t i = 0; i < static_cast<size_t>(n_uwords) + 1; ++i) {
-        idx.push_back(reader.Read<uint32_t>());
-    }
+    const uint32_t* offsets = reinterpret_cast<const uint32_t*>(
+        reader.Peek((n_uwords + 1) * sizeof(uint32_t)));
 
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
@@ -111,13 +108,14 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     const char* raw = reader.Peek(raw_size);
 
     ColumnTypeInt64 helper;
-    auto data = helper.GetBatch(0, reader);
+    auto indices_data = helper.GetBatch(0, reader);
+    const auto& indices = std::get<std::vector<int64_t>>(indices_data);
 
     std::vector<std::string_view> result;
     result.reserve(n_words);
     for (size_t i = 0; i < n_words; ++i) {
-        auto pos = static_cast<size_t>(std::get<std::vector<int64_t>>(data)[i]);
-        result.emplace_back(raw + idx[pos], idx[pos + 1] - idx[pos]);
+        auto pos = static_cast<size_t>(indices[i]);
+        result.emplace_back(raw + offsets[pos], offsets[pos + 1] - offsets[pos]);
     }
 
     return result;

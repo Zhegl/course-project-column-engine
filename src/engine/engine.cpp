@@ -61,10 +61,10 @@ std::optional<EngineBatch> Scan::GetNext() {
     constexpr size_t kReadaheadGroups = 4;
     size_t ra_rg = current_row_group_ + kReadaheadGroups - 1;
     if (ra_rg < num_row_groups_) {
-        size_t ra_start = batch_meta_[ra_rg * cols + columns_.front()].offset;
-        size_t ra_end = batch_meta_[ra_rg * cols + columns_.back()].offset +
-                        batch_meta_[ra_rg * cols + columns_.back()].size;
-        readahead(reader_.Fd(), ra_start, ra_end - ra_start);
+        for (size_t col : columns_) {
+            const auto& meta = batch_meta_[ra_rg * cols + col];
+            readahead(reader_.Fd(), meta.offset, meta.size);
+        }
     }
 
     EngineBatch result;

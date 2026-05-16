@@ -8,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <vector>
+#include <fcntl.h>
 #include "batch.h"
 
 namespace column_engine::internal {
@@ -56,6 +57,15 @@ std::optional<EngineBatch> Scan::GetNext() {
 
     size_t cols = schema_.columns.size();
     size_t rg = current_row_group_++;
+
+    constexpr size_t kReadaheadGroups = 4;
+    size_t ra_rg = current_row_group_ + kReadaheadGroups - 1;
+    if (ra_rg < num_row_groups_) {
+        for (size_t col : columns_) {
+            const auto& meta = batch_meta_[ra_rg * cols + col];
+            readahead(reader_.Fd(), meta.offset, meta.size);
+        }
+    }
 
     EngineBatch result;
     for (size_t col : columns_) {

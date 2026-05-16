@@ -20,7 +20,8 @@ ApiPipeline ApiPipeline::Count(std::string arg) {
             root_,
             std::vector<size_t>{},
             std::vector<std::string>{},
-            std::vector<AggFactory>{[]() { return std::make_shared<CountAll>(); }});
+            std::vector<AggFactory>{[]() { return std::make_shared<CountAll>(); }},
+            GroupKeyType::Multi);
         return *this;
     }
     throw std::runtime_error("Wrong arg for .Count: " + arg);
@@ -172,11 +173,18 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
     }
     parser_.SetSchema(new_schema);
 
+    GroupKeyType key_type = GroupKeyType::Multi;
+    if (group_columns.size() == 1) {
+        const auto& type_name = cur_schema.columns[group_column_ids[0]].type->GetTypeName();
+        key_type = (type_name == "int64") ? GroupKeyType::Int : GroupKeyType::Str;
+    }
+
     root_ = std::make_shared<class Aggregate>(
         root_,
         std::move(group_column_ids),
         std::move(group_columns),
-        std::move(agg_factories));
+        std::move(agg_factories),
+        key_type);
 
 
 

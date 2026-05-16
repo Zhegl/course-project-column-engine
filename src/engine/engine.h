@@ -49,14 +49,20 @@ private:
     std::shared_ptr<FilterPredicate> pred_;
 };
 
+enum class GroupKeyType { Int, Str, Multi };
+
 class Aggregate : public Operator {
 public:
+    using AggVec = std::vector<std::shared_ptr<Aggregator>>;
+
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
-              std::vector<std::string> group_names, std::vector<AggFactory> factories)
+              std::vector<std::string> group_names, std::vector<AggFactory> factories,
+              GroupKeyType key_type)
         : child_(std::move(child)),
           group_columns_(std::move(group_columns)),
           group_names_(std::move(group_names)),
-          factories_(std::move(factories)) {
+          factories_(std::move(factories)),
+          key_type_(key_type) {
     }
 
     std::optional<EngineBatch> GetNext() override;
@@ -64,12 +70,16 @@ public:
 private:
     void Run();
     bool ready_{false};
+    size_t cur_idx_{0};
+    GroupKeyType key_type_;
     std::shared_ptr<Operator> child_;
     std::vector<size_t> group_columns_;
     std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
-    HashMap<std::vector<std::shared_ptr<Aggregator>>> groups_;
-    HashMap<std::vector<std::shared_ptr<Aggregator>>>::iterator cur_;
+
+    std::optional<HashMap<int64_t, AggVec, IntHash>>    int_groups_;
+    std::optional<HashMap<std::string, AggVec, StrHash>> str_groups_;
+    std::optional<GroupHashMap<AggVec>>                  multi_groups_;
 };
 
 class LimitOp : public Operator {

@@ -13,3 +13,9 @@ run-clang-format.py
 /tmp
 commands.sh
 env.sh
+input.csv
+input2.csv
+schema.csv
+schema2.csv
+test.col
+test2.col

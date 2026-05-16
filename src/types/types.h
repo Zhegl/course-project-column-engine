@@ -4,13 +4,14 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 namespace column_engine {
 
 using ColumnValue = std::variant<int64_t, std::string>;
-using ColumnData = std::variant<std::vector<int64_t>, std::vector<std::string>>;
+using ColumnData = std::variant<std::vector<int64_t>, std::vector<std::string_view>, std::vector<std::string>>;
 
 class ColumnTypeName {
 public:

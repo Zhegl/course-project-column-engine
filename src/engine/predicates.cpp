@@ -1,4 +1,5 @@
 #include "engine/predicates.h"
+#include <string_view>
 
 namespace column_engine::internal {
 
@@ -21,7 +22,29 @@ StrConstNE::StrConstNE(size_t id_a, std::string const_b)
 }
 
 bool StrConstNE::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<std::string>>(batch.columns[id_a_])[i] != const_b_;
+    return GetStrAt(batch.columns[id_a_], i) != const_b_;
+}
+
+std::vector<RowIndex> StrConstNE::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+    std::vector<RowIndex> result;
+    result.reserve(selection.size());
+    const auto& col = batch.columns[id_a_];
+    if (std::holds_alternative<std::vector<std::string_view>>(col)) {
+        const auto& sv_col = std::get<std::vector<std::string_view>>(col);
+        for (auto i : selection) {
+            if (sv_col[i] != const_b_) {
+                result.push_back(i);
+            }
+        }
+    } else {
+        const auto& s_col = std::get<std::vector<std::string>>(col);
+        for (auto i : selection) {
+            if (s_col[i] != const_b_) {
+                result.push_back(i);
+            }
+        }
+    }
+    return result;
 }
 
 StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
@@ -29,10 +52,32 @@ StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
 }
 
 bool StrConstEQ::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<std::string>>(batch.columns[id_a_])[i] == const_b_;
+    return GetStrAt(batch.columns[id_a_], i) == const_b_;
 }
 
-static bool LikeMatch(const std::string& str, const std::string& pattern) {
+std::vector<RowIndex> StrConstEQ::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+    std::vector<RowIndex> result;
+    result.reserve(selection.size());
+    const auto& col = batch.columns[id_a_];
+    if (std::holds_alternative<std::vector<std::string_view>>(col)) {
+        const auto& sv_col = std::get<std::vector<std::string_view>>(col);
+        for (auto i : selection) {
+            if (sv_col[i] == const_b_) {
+                result.push_back(i);
+            }
+        }
+    } else {
+        const auto& s_col = std::get<std::vector<std::string>>(col);
+        for (auto i : selection) {
+            if (s_col[i] == const_b_) {
+                result.push_back(i);
+            }
+        }
+    }
+    return result;
+}
+
+static bool LikeMatch(const std::string_view str, const std::string& pattern) {
     std::vector<std::string_view> parts;
     size_t start = 0;
     bool anchored_start = !pattern.empty() && pattern[0] != '%';
@@ -77,7 +122,7 @@ StrLike::StrLike(size_t id_a, std::string pattern) : id_a_(id_a), infix_(std::mo
 }
 
 bool StrLike::Check(EngineBatch& batch, RowIndex i) {
-    return LikeMatch(std::get<std::vector<std::string>>(batch.columns[id_a_])[i], infix_);
+    return LikeMatch(GetStrAt(batch.columns[id_a_], i), infix_);
 }
 
 StrNotLike::StrNotLike(size_t id_a, std::string pattern) : inner_(id_a, std::move(pattern)) {

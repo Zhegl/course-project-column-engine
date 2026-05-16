@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_set>
 #include "engine/batch.h"
+#include "engine/predicates.h"
 #include "types/types.h"
 
 namespace column_engine::internal {

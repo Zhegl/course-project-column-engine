@@ -103,7 +103,14 @@ auto get_size = [](const ColumnData& col) {
 };
 
 auto get_value = [](const ColumnData& col, size_t i) -> ColumnValue {
-    return std::visit([i](const auto& v) -> ColumnValue { return v[i]; }, col);
+    return std::visit([i](const auto& v) -> ColumnValue {
+        using T = typename std::decay_t<decltype(v)>::value_type;
+        if constexpr (std::is_same_v<T, std::string_view>) {
+            return std::string(v[i]);
+        } else {
+            return v[i];
+        }
+    }, col);
 };
 
 void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std::string& input_path,

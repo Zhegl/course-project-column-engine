@@ -4,19 +4,25 @@
 namespace column_engine::internal {
 
 ColumnValue Strftime::Get(EngineBatch& batch, RowIndex i) {
-    const std::string& s = std::get<std::vector<std::string>>(batch.columns[col_idx_])[i];
+    auto sv = GetStrAt(batch.columns[col_idx_], i);
+    const char* s = sv.data();
+    size_t slen = sv.size();
+    auto parse2 = [](const char* p) { return (p[0] - '0') * 10 + (p[1] - '0'); };
+    auto parse4 = [](const char* p) {
+        return (p[0]-'0')*1000 + (p[1]-'0')*100 + (p[2]-'0')*10 + (p[3]-'0');
+    };
     struct tm t {};
-    if (s.size() >= 19) {
-        t.tm_year = std::stoi(s.substr(0, 4)) - 1900;
-        t.tm_mon = std::stoi(s.substr(5, 2)) - 1;
-        t.tm_mday = std::stoi(s.substr(8, 2));
-        t.tm_hour = std::stoi(s.substr(11, 2));
-        t.tm_min = std::stoi(s.substr(14, 2));
-        t.tm_sec = std::stoi(s.substr(17, 2));
-    } else if (s.size() >= 10) {
-        t.tm_year = std::stoi(s.substr(0, 4)) - 1900;
-        t.tm_mon = std::stoi(s.substr(5, 2)) - 1;
-        t.tm_mday = std::stoi(s.substr(8, 2));
+    if (slen >= 19) {
+        t.tm_year = parse4(s) - 1900;
+        t.tm_mon  = parse2(s + 5) - 1;
+        t.tm_mday = parse2(s + 8);
+        t.tm_hour = parse2(s + 11);
+        t.tm_min  = parse2(s + 14);
+        t.tm_sec  = parse2(s + 17);
+    } else if (slen >= 10) {
+        t.tm_year = parse4(s) - 1900;
+        t.tm_mon  = parse2(s + 5) - 1;
+        t.tm_mday = parse2(s + 8);
     }
     char buf[64];
     std::strftime(buf, sizeof(buf), fmt_.c_str(), &t);

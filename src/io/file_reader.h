@@ -36,6 +36,8 @@ public:
         return ptr;
     }
 
+    int Fd() const { return fd_; }
+
 private:
     char* base_ = nullptr;
     size_t size_ = 0;

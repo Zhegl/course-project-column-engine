@@ -11,19 +11,19 @@ ColumnData CountAll::GetResult() {
 }
 
 void IntCountDistinct::Next(EngineBatch& batch, RowIndex i) {
-    values_.insert(std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i]);
+    values_[std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i]];
 }
 
 ColumnData IntCountDistinct::GetResult() {
-    return std::vector<int64_t>{static_cast<int64_t>(values_.size())};
+    return std::vector<int64_t>{static_cast<int64_t>(values_.Size())};
 }
 
 void StrCountDistinct::Next(EngineBatch& batch, RowIndex i) {
-    values_.emplace(GetStrAt(batch.columns[col_idx_], i));
+    values_[std::string(GetStrAt(batch.columns[col_idx_], i))];
 }
 
 ColumnData StrCountDistinct::GetResult() {
-    return std::vector<int64_t>{static_cast<int64_t>(values_.size())};
+    return std::vector<int64_t>{static_cast<int64_t>(values_.Size())};
 }
 
 void IntSum::Next(EngineBatch& batch, RowIndex i) {

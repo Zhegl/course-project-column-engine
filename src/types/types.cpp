@@ -99,11 +99,8 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     uint16_t n_uwords = reader.Read<uint16_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
 
-    std::vector<uint32_t> idx;
-    idx.reserve(n_uwords + 1);
-    for (size_t i = 0; i < static_cast<size_t>(n_uwords) + 1; ++i) {
-        idx.push_back(reader.Read<uint32_t>());
-    }
+    const uint32_t* offsets = reinterpret_cast<const uint32_t*>(
+        reader.Peek((n_uwords + 1) * sizeof(uint32_t)));
 
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
@@ -111,13 +108,14 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     const char* raw = reader.Peek(raw_size);
 
     ColumnTypeInt64 helper;
-    auto data = helper.GetBatch(0, reader);
+    auto indices_data = helper.GetBatch(0, reader);
+    const auto& indices = std::get<std::vector<int64_t>>(indices_data);
 
     std::vector<std::string_view> result;
     result.reserve(n_words);
     for (size_t i = 0; i < n_words; ++i) {
-        auto pos = static_cast<size_t>(std::get<std::vector<int64_t>>(data)[i]);
-        result.emplace_back(raw + idx[pos], idx[pos + 1] - idx[pos]);
+        auto pos = static_cast<size_t>(indices[i]);
+        result.emplace_back(raw + offsets[pos], offsets[pos + 1] - offsets[pos]);
     }
 
     return result;
@@ -207,7 +205,7 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t /*size*/, FileReader& reader) {
+ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;
@@ -243,15 +241,36 @@ ColumnData ColumnTypeInt64::GetBatch(size_t /*size*/, FileReader& reader) {
             count += n;
         }
     } else {
-        size_t block = 0;
-        uint64_t val = 0;
-        for (size_t i = 0; i < n_values; ++i) {
-            if (block + 1 < blocks && i >= block_start[block + 1]) {
-                ++block;
-                val = 0;
+        for (size_t block = 0; block < blocks; ++block) {
+            size_t n = (block + 1 < blocks ? block_start[block + 1] : n_values) - block_start[block];
+            uint8_t sz = read_sz[block];
+            int64_t base = min_val[block];
+            const char* ptr = reader.Peek(n * sz);
+            switch (sz) {
+            case 1:
+                for (size_t i = 0; i < n; ++i) {
+                    result.push_back(base + static_cast<uint8_t>(ptr[i]));
+                }
+                break;
+            case 2:
+                for (size_t i = 0; i < n; ++i) {
+                    uint16_t v; memcpy(&v, ptr + i * 2, 2);
+                    result.push_back(base + v);
+                }
+                break;
+            case 4:
+                for (size_t i = 0; i < n; ++i) {
+                    uint32_t v; memcpy(&v, ptr + i * 4, 4);
+                    result.push_back(base + v);
+                }
+                break;
+            case 8:
+                for (size_t i = 0; i < n; ++i) {
+                    uint64_t v; memcpy(&v, ptr + i * 8, 8);
+                    result.push_back(base + v);
+                }
+                break;
             }
-            reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
-            result.push_back(static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block])));
         }
     }
 

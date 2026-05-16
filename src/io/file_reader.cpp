@@ -59,9 +59,7 @@ size_t FileReader::GetPos() {
     return pos_;
 }
 
-size_t FileReader::Size() {void FileWriter::Write(const char* data, size_t size) {
-    stream_.write(data, size);
-}
+size_t FileReader::Size() {
     return size_;
 }
 

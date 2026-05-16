@@ -25,6 +25,7 @@ FileReader::FileReader(const std::string& path) {
             close(fd_);
             throw std::runtime_error("Failed to mmap " + path);
         }
+        madvise(base_, size_, MADV_SEQUENTIAL);
     }
 }
 

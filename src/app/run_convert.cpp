@@ -14,7 +14,7 @@ void Usage() {
 }
 
 void Run(int argc, char** argv) {
-    size_t batch_size = 1000000;
+    size_t batch_size = 8192;
     std::string input_path;
     std::string output_path;
     std::string schema_path;

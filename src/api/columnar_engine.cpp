@@ -66,15 +66,15 @@ QueryResult ApiPipeline::Run() {
 
 // ColumnEngine
 
-ColumnEngine::ColumnEngine(const std::string& path)
-    : impl_(std::make_unique<internal::Engine>(path)) {}
+ColumnEngine::ColumnEngine(const std::string& path, size_t n_workers)
+    : impl_(std::make_unique<internal::Engine>(path)), n_workers_(n_workers) {}
 
 ColumnEngine::~ColumnEngine() = default;
 ColumnEngine::ColumnEngine(ColumnEngine&&) noexcept = default;
 ColumnEngine& ColumnEngine::operator=(ColumnEngine&&) noexcept = default;
 
 ApiPipeline ColumnEngine::Api() {
-    return ApiPipeline(std::make_unique<internal::ApiPipeline>(impl_->Api()));
+    return ApiPipeline(std::make_unique<internal::ApiPipeline>(impl_->Api(n_workers_)));
 }
 
 }  // namespace column_engine

@@ -54,7 +54,7 @@ int main(int argc, char** argv) {
     std::string output_path = argv[3];
 
     try {
-        Engine engine(columnar);
+        Engine engine(columnar, 0);
         QueryResult result = RunQuery(engine, query_num);
 
         std::ofstream out(output_path);

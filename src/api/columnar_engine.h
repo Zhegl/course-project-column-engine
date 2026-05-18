@@ -54,7 +54,7 @@ private:
 
 class ColumnEngine {
 public:
-    explicit ColumnEngine(const std::string& path);
+    explicit ColumnEngine(const std::string& path, size_t n_workers=0);
     ~ColumnEngine();
     ColumnEngine(ColumnEngine&&) noexcept;
     ColumnEngine& operator=(ColumnEngine&&) noexcept;
@@ -63,6 +63,7 @@ public:
 
 private:
     std::unique_ptr<internal::Engine> impl_;
+    size_t n_workers_;
 };
 
 using Engine = ColumnEngine;

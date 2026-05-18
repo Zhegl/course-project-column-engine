@@ -20,7 +20,7 @@ class Scan;
 
 class ApiPipeline {
 public:
-    explicit ApiPipeline(Engine& engine, const Schema& schema);
+    explicit ApiPipeline(Engine& engine, const Schema& schema, size_t n_workers=0);
     ApiPipeline Count(std::string arg);
     ApiPipeline Where(std::string arg);
     ApiPipeline Aggregate(std::string arg);

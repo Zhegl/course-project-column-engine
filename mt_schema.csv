@@ -1,0 +1,4 @@
+id,int64
+score,int64
+name,string
+group,string

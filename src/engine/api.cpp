@@ -8,9 +8,9 @@
 
 namespace column_engine::internal {
 
-ApiPipeline::ApiPipeline(Engine& engine, const Schema& schema)
+ApiPipeline::ApiPipeline(Engine& engine, const Schema& schema, size_t n_workers)
     : engine_(engine), parser_(schema) {
-    scanner_ = engine.MakeScan();
+    scanner_ = engine.MakeScan(n_workers);
     root_ = scanner_;
 }
 

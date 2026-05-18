@@ -246,30 +246,10 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
             uint8_t sz = read_sz[block];
             int64_t base = min_val[block];
             const char* ptr = reader.Peek(n * sz);
-            switch (sz) {
-            case 1:
-                for (size_t i = 0; i < n; ++i) {
-                    result.push_back(base + static_cast<uint8_t>(ptr[i]));
-                }
-                break;
-            case 2:
-                for (size_t i = 0; i < n; ++i) {
-                    uint16_t v; memcpy(&v, ptr + i * 2, 2);
-                    result.push_back(base + v);
-                }
-                break;
-            case 4:
-                for (size_t i = 0; i < n; ++i) {
-                    uint32_t v; memcpy(&v, ptr + i * 4, 4);
-                    result.push_back(base + v);
-                }
-                break;
-            case 8:
-                for (size_t i = 0; i < n; ++i) {
-                    uint64_t v; memcpy(&v, ptr + i * 8, 8);
-                    result.push_back(base + v);
-                }
-                break;
+            for (size_t i = 0; i < n; ++i) {
+                uint64_t v = 0;
+                memcpy(&v, ptr + i * sz, sz);
+                result.push_back(base + static_cast<int64_t>(v));
             }
         }
     }

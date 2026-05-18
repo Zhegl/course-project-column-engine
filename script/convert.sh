@@ -9,4 +9,5 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ./build/bin/convert \
     --input "${INPUT_CSV}" \
     --schema "${SCRIPT_DIR}/hits_schema.csv" \
-    --output "${COLUMNAR}"
+    --output "${COLUMNAR}" \
+    --batch 8192

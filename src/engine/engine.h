@@ -11,6 +11,7 @@
 #include <engine/predicates.h>
 #include <engine/expressions.h>
 #include <engine/parser.h>
+#include <engine/multithreading/scan.h>
 
 namespace column_engine::internal {
 
@@ -23,17 +24,21 @@ public:
 
 class Scan : public Operator {
 public:
-    Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta);
+    Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta,
+         size_t num_workers = 0);
     std::optional<EngineBatch> GetNext() override;
     void SetColumns(std::vector<size_t> columns);
 
 private:
+    std::string path_;
     FileReader reader_;
     Schema schema_;
     std::vector<BatchMetaData> batch_meta_;
     std::vector<size_t> columns_;
     size_t current_row_group_ = 0;
     size_t num_row_groups_ = 0;
+    size_t num_workers_ = 0;
+    std::optional<ScanWorkersPool> pool_;
 };
 
 class Filter : public Operator {
@@ -220,8 +225,8 @@ public:
     explicit Engine(const std::string& path);
     EngineBatch Run(std::shared_ptr<Operator> root,
                     const std::vector<size_t>& selected_columns = {});
-    std::shared_ptr<Scan> MakeScan();
-    ApiPipeline Api();
+    std::shared_ptr<Scan> MakeScan(size_t num_workers = 0);
+    ApiPipeline Api(size_t n_workers=0);
 
 private:
     Schema schema_;

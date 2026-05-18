@@ -94,21 +94,23 @@ size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& wr
     return result;
 }
 
-ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
-    uint16_t n_words = reader.Read<uint16_t>();
-    uint16_t n_uwords = reader.Read<uint16_t>();
-    uint32_t final_offset = reader.Read<uint32_t>();
+template <typename R>
+static ColumnData StringGetBatch(size_t size, R& reader) {
+    uint16_t n_words = reader.template Read<uint16_t>();
+    uint16_t n_uwords = reader.template Read<uint16_t>();
+    uint32_t final_offset = reader.template Read<uint32_t>();
 
-    const uint32_t* offsets = reinterpret_cast<const uint32_t*>(
-        reader.Peek((n_uwords + 1) * sizeof(uint32_t)));
+    size_t n_offsets = n_uwords + 1;
+    const char* offsets_raw = reader.Peek(n_offsets * sizeof(uint32_t));
+    std::vector<uint32_t> offsets(n_offsets);
+    memcpy(offsets.data(), offsets_raw, n_offsets * sizeof(uint32_t));
 
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
-                         (n_uwords + 1) * sizeof(uint32_t);
+                         n_offsets * sizeof(uint32_t);
     size_t raw_size = final_offset - header_size;
     const char* raw = reader.Peek(raw_size);
 
-    ColumnTypeInt64 helper;
-    auto indices_data = helper.GetBatch(0, reader);
+    auto indices_data = Int64GetBatch(0, reader);
     const auto& indices = std::get<std::vector<int64_t>>(indices_data);
 
     std::vector<std::string_view> result;
@@ -205,20 +207,21 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
+template <typename R>
+static ColumnData Int64GetBatch(size_t, R& reader) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;
     std::vector<uint32_t> block_start;
 
-    bool rle = reader.Read<bool>();
-    uint32_t n_values = reader.Read<uint32_t>();
-    uint16_t blocks = reader.Read<uint16_t>();
+    bool rle = reader.template Read<bool>();
+    uint32_t n_values = reader.template Read<uint32_t>();
+    uint16_t blocks = reader.template Read<uint16_t>();
 
     for (size_t i = 0; i < blocks; ++i) {
-        min_val.push_back(reader.Read<int64_t>());
-        read_sz.push_back(reader.Read<uint8_t>());
-        block_start.push_back(reader.Read<uint32_t>());
+        min_val.push_back(reader.template Read<int64_t>());
+        read_sz.push_back(reader.template Read<uint8_t>());
+        block_start.push_back(reader.template Read<uint32_t>());
     }
 
     result.reserve(n_values);
@@ -231,7 +234,7 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
             if (block + 1 < blocks && count >= block_start[block + 1]) {
                 ++block;
             }
-            uint8_t n = reader.Read<uint8_t>();
+            uint8_t n = reader.template Read<uint8_t>();
             val = 0;
             reader.Read(reinterpret_cast<char*>(&val), read_sz[block]);
             int64_t res = static_cast<int64_t>(val + static_cast<uint64_t>(min_val[block]));
@@ -256,5 +259,10 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
 
     return result;
 }
+
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader)     { return StringGetBatch(size, reader); }
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReaderView& reader) { return StringGetBatch(size, reader); }
+ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReader& reader)      { return Int64GetBatch(size, reader); }
+ColumnData ColumnTypeInt64::GetBatch(size_t size, FileReaderView& reader)  { return Int64GetBatch(size, reader); }
 
 };  // namespace column_engine

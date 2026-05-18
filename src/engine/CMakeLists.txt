@@ -5,6 +5,7 @@ add_library(engine_lib
     expressions.cpp
     api.cpp
     parser.cpp
+    multithreading/scan.cpp
 )
 
 target_include_directories(engine_lib

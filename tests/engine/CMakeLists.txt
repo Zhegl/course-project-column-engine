@@ -34,6 +34,17 @@ target_link_libraries(test_clickbench_auto
         glog::glog
 )
 
+add_executable(test_multithreading
+    test_multithreading.cpp
+)
+target_link_libraries(test_multithreading
+    PRIVATE
+        api_lib
+        convert_lib
+        gtest
+        glog::glog
+)
+
 add_custom_command(TARGET test_clickbench_auto POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E create_symlink
         ${CMAKE_CURRENT_SOURCE_DIR}/check_query.py

@@ -39,18 +39,28 @@ std::optional<EngineBatch> GetAllBatches(std::shared_ptr<Operator> op, size_t li
 
 }  // namespace
 
-Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
-    : reader_(FileReader(path)),
+Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta,
+           size_t num_workers)
+    : path_(path),
+      reader_(FileReader(path)),
       schema_(std::move(schema)),
       batch_meta_(std::move(batch_meta)),
-      num_row_groups_(batch_meta_.size() / schema_.columns.size()) {
+      num_row_groups_(batch_meta_.size() / schema_.columns.size()),
+      num_workers_(num_workers) {
 }
 
 void Scan::SetColumns(std::vector<size_t> columns) {
     columns_ = columns;
+    if (num_workers_ > 0) {
+        pool_.emplace(num_workers_, path_, schema_, batch_meta_, columns_);
+    }
 }
 
 std::optional<EngineBatch> Scan::GetNext() {
+    if (pool_) {
+        return pool_->GetNext();
+    }
+
     if (current_row_group_ >= num_row_groups_) {
         return std::nullopt;
     }
@@ -367,8 +377,8 @@ Engine::Engine(const std::string& path) : path_(path) {
     //           << batch_meta_.size() / schema_.columns.size() << " row groups";
 }
 
-std::shared_ptr<Scan> Engine::MakeScan() {
-    return std::make_shared<Scan>(path_, schema_, batch_meta_);
+std::shared_ptr<Scan> Engine::MakeScan(size_t num_workers) {
+    return std::make_shared<Scan>(path_, schema_, batch_meta_, num_workers);
 }
 
 EngineBatch Engine::Run(std::shared_ptr<Operator> root,
@@ -391,8 +401,8 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root,
     return EngineBatch{};
 }
 
-ApiPipeline Engine::Api() {
-    return ApiPipeline(*this, schema_);
+ApiPipeline Engine::Api(size_t n_workers) {
+    return ApiPipeline(*this, schema_, n_workers);
 }
 
 }  // namespace column_engine::internal

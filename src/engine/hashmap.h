@@ -57,13 +57,13 @@ private:
         
         current_ptr_ = new_block;
         current_end_ = current_ptr_ + block_size;
-        next_block_size_ = std::min(static_cast<size_t>(8388608), block_size * 2);
+        next_block_size_ = std::min(static_cast<size_t>(67108864), block_size * 2);
     }
 
     std::vector<char*> blocks_;
     char* current_ptr_ = nullptr;
     char* current_end_ = nullptr;
-    size_t next_block_size_ = 65536;
+    size_t next_block_size_ = 4194304;
 };
 
 template <typename T, typename Y>
@@ -259,11 +259,6 @@ struct StrHash {
     }
 };
 
-struct GroupKey {
-    std::vector<ColumnValue> values;
-
-    bool operator==(const GroupKey& other) const = default;
-};
 
 struct ColumnValueHash {
     size_t operator()(const ColumnValue& value) const {
@@ -278,19 +273,7 @@ struct StringViewHash {
     }
 };
 
-struct GroupKeyHash {
-    size_t operator()(const GroupKey& key) const {
-        size_t hash = 0;
-        ColumnValueHash value_hash;
-        for (const auto& value : key.values) {
-            hash ^= value_hash(value) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        }
-        return hash;
-    }
-};
 
-template <typename T>
-using GroupHashMap = HashMap<GroupKey, T, GroupKeyHash>;
 
 }  // namespace column_engine::internal
 // NOLINTEND(readability-identifier-naming)

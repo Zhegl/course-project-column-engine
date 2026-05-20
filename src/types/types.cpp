@@ -99,8 +99,9 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     uint16_t n_uwords = reader.Read<uint16_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
 
-    const uint32_t* offsets = reinterpret_cast<const uint32_t*>(
-        reader.Peek((n_uwords + 1) * sizeof(uint32_t)));
+    const char* offsets_raw = reinterpret_cast<const char*>(
+        reader.Peek((n_uwords + 1) * sizeof(uint32_t))
+    );
 
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
@@ -115,7 +116,13 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     result.reserve(n_words);
     for (size_t i = 0; i < n_words; ++i) {
         auto pos = static_cast<size_t>(indices[i]);
-        result.emplace_back(raw + offsets[pos], offsets[pos + 1] - offsets[pos]);
+        
+        uint32_t current_offset;
+        uint32_t next_offset;
+        std::memcpy(&current_offset, offsets_raw + (pos * sizeof(uint32_t)), sizeof(uint32_t));
+        std::memcpy(&next_offset, offsets_raw + ((pos + 1) * sizeof(uint32_t)), sizeof(uint32_t));
+
+        result.emplace_back(raw + current_offset, next_offset - current_offset);
     }
 
     return result;

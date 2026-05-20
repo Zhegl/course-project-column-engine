@@ -54,10 +54,7 @@ enum class GroupKeyType { Int, Str, Multi };
 
 class Aggregate : public Operator {
 public:
-    struct AggSlot {
-        int64_t count{0};
-        std::vector<std::shared_ptr<Aggregator>> rest;
-    };
+    using AggVec = std::vector<std::shared_ptr<Aggregator>>;
 
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
               std::vector<std::string> group_names, std::vector<AggFactory> factories,  GroupKeyType key_type)
@@ -74,14 +71,13 @@ private:
     void Run();
     bool ready_{false};
     size_t cur_idx_{0};
-    bool has_count_all_{false};
     GroupKeyType key_type_;
     std::shared_ptr<Operator> child_;
     std::vector<size_t> group_columns_;
     std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
 
-    HashMap<std::string_view, AggSlot, StringViewHash> groups_;
+    HashMap<std::string_view, AggVec, StringViewHash> groups_;
     Arena arena_;
     std::vector<char> key_buffer_;
     std::vector<bool> is_string_column_;

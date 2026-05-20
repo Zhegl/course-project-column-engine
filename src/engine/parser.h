@@ -10,10 +10,7 @@
 
 namespace column_engine::internal {
 
-struct AggFactory {
-    std::function<std::shared_ptr<Aggregator>()> make;
-    bool is_count_all{false};
-};
+using AggFactory = std::function<std::shared_ptr<Aggregator>()>;
 
 class QueryParser {
 public:

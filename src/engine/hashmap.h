@@ -10,10 +10,30 @@ namespace column_engine::internal {
 
 class Arena {
 public:
+    Arena() = default;
+
+    Arena(const Arena&) = delete;
+    Arena& operator=(const Arena&) = delete;
+
+    Arena(Arena&& other) noexcept 
+        : blocks_(std::move(other.blocks_)),
+          current_ptr_(other.current_ptr_),
+          current_end_(other.current_end_),
+          next_block_size_(other.next_block_size_) {
+        other.current_ptr_ = nullptr;
+        other.current_end_ = nullptr;
+    }
+
+    ~Arena() {
+        for (char* block : blocks_) {
+            delete[] block;
+        }
+    }
+
     std::string_view Alloc(std::string_view data) {
         if (data.empty()) {
             return std::string_view("", 0);
-        }   
+        }
 
         size_t size = data.size();
         size_t available = current_end_ - current_ptr_;
@@ -30,15 +50,20 @@ public:
 
 private:
     void AllocateNewBlock(size_t min_size) {
-        size_t block_size = std::max(static_cast<size_t>(65536), min_size);
-        blocks_.emplace_back(block_size);
-        current_ptr_ = blocks_.back().data();
+        size_t block_size = std::max(next_block_size_, min_size);
+        
+        char* new_block = new char[block_size];
+        blocks_.push_back(new_block);
+        
+        current_ptr_ = new_block;
         current_end_ = current_ptr_ + block_size;
+        next_block_size_ = std::min(static_cast<size_t>(8388608), block_size * 2);
     }
 
-    std::vector<std::vector<char>> blocks_;
+    std::vector<char*> blocks_;
     char* current_ptr_ = nullptr;
     char* current_end_ = nullptr;
+    size_t next_block_size_ = 65536;
 };
 
 template <typename T, typename Y>

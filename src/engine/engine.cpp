@@ -225,15 +225,8 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     EngineBatch result;
     result.names = group_names_;
 
-    if (has_count_all_) {
-        result.names.push_back("COUNT(*)");
-        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
-            result.names.push_back(agg->GetName());
-        }
-    } else {
-        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
-            result.names.push_back(agg->GetName());
-        }
+    for (const auto& name : agg_names_) {
+        result.names.push_back(name);
     }
 
     for (size_t i = 0; i < group_columns_.size(); ++i) {

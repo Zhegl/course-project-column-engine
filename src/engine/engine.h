@@ -60,11 +60,13 @@ public:
     };
 
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
-              std::vector<std::string> group_names, std::vector<AggFactory> factories,  GroupKeyType key_type)
+              std::vector<std::string> group_names, std::vector<AggFactory> factories,
+              std::vector<std::string> agg_names, GroupKeyType key_type)
         : child_(std::move(child)),
           group_columns_(std::move(group_columns)),
           group_names_(std::move(group_names)),
           factories_(std::move(factories)),
+          agg_names_(std::move(agg_names)),
           key_type_(key_type) {
     }
 
@@ -79,6 +81,7 @@ private:
     std::shared_ptr<Operator> child_;
     std::vector<size_t> group_columns_;
     std::vector<std::string> group_names_;
+    std::vector<std::string> agg_names_;
     std::vector<AggFactory> factories_;
 
     HashMap<std::string_view, AggSlot, StringViewHash> groups_;

@@ -21,6 +21,7 @@ ApiPipeline ApiPipeline::Count(std::string arg) {
             std::vector<size_t>{},
             std::vector<std::string>{},
             std::vector<AggFactory>{{[]() { return std::make_shared<CountAll>(); }, true}},
+            std::vector<std::string>{"COUNT(*)"},
             GroupKeyType::Multi);
         return *this;
     }
@@ -164,6 +165,12 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
 
     auto [agg_factories, agg_columns] = parser_.ParseAggregate(aggregates);
 
+    std::vector<std::string> agg_names;
+    agg_names.reserve(agg_columns.size());
+    for (const auto& col : agg_columns) {
+        agg_names.push_back(col.name);
+    }
+
     Schema new_schema;
     for (size_t id : group_column_ids) {
         new_schema.columns.push_back(cur_schema.columns[id]);
@@ -184,6 +191,7 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
         std::move(group_column_ids),
         std::move(group_columns),
         std::move(agg_factories),
+        std::move(agg_names),
         key_type);
 
 

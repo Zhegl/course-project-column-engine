@@ -138,6 +138,9 @@ std::optional<EngineBatch> GetNextMap(Map& groups, size_t& cur_idx,
     for (const auto& agg : groups.GetSlot(cur_idx).val) {
         result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
     }
+    for (auto& col : result.columns) {
+        std::visit([](auto& v) { v.reserve(kBatchSize); }, col);
+    }
 
     size_t count = 0;
     while (cur_idx < groups.Capacity() && count < kBatchSize) {

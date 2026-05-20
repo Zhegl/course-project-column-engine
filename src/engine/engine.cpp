@@ -100,6 +100,8 @@ std::optional<EngineBatch> Filter::GetNext() {
 void Aggregate::Run() {
     ready_ = true;
 
+    has_count_all_ = !factories_.empty() && factories_[0].is_count_all;
+
     enum class ColType { Int, Str };
     std::vector<std::pair<size_t, ColType>> typed_columns;
     typed_columns.reserve(group_columns_.size());
@@ -113,7 +115,7 @@ void Aggregate::Run() {
             if (std::holds_alternative<std::vector<int64_t>>(col_data)) {
                 typed_columns.emplace_back(col_idx, ColType::Int);
                 is_string_column_[i] = false;
-            } else if (std::holds_alternative<std::vector<std::string_view>>(col_data) || 
+            } else if (std::holds_alternative<std::vector<std::string_view>>(col_data) ||
                        std::holds_alternative<std::vector<std::string>>(col_data)) {
                 typed_columns.emplace_back(col_idx, ColType::Str);
                 is_string_column_[i] = true;
@@ -122,51 +124,80 @@ void Aggregate::Run() {
             }
         }
 
-        auto process_batch = [&](EngineBatch& batch) {
-            for (auto i : batch.selection) {
-                key_buffer_.clear();
-
-                for (const auto& [col_idx, type] : typed_columns) {
-                    const auto& col_data = batch.columns[col_idx];
-
-                    if (type == ColType::Int) {
-                        int64_t val = std::get<std::vector<int64_t>>(col_data)[i];
-                        size_t old_size = key_buffer_.size();
-                        key_buffer_.resize(old_size + sizeof(int64_t));
-                        std::memcpy(key_buffer_.data() + old_size, &val, sizeof(int64_t));
+        auto build_key = [&](EngineBatch& batch, RowIndex i) {
+            key_buffer_.clear();
+            for (const auto& [col_idx, type] : typed_columns) {
+                const auto& col_data = batch.columns[col_idx];
+                if (type == ColType::Int) {
+                    int64_t val = std::get<std::vector<int64_t>>(col_data)[i];
+                    size_t old_size = key_buffer_.size();
+                    key_buffer_.resize(old_size + sizeof(int64_t));
+                    std::memcpy(key_buffer_.data() + old_size, &val, sizeof(int64_t));
+                } else {
+                    std::string_view str;
+                    if (std::holds_alternative<std::vector<std::string_view>>(col_data)) {
+                        str = std::get<std::vector<std::string_view>>(col_data)[i];
                     } else {
-                        std::string_view str;
-                        if (std::holds_alternative<std::vector<std::string_view>>(col_data)) {
-                            str = std::get<std::vector<std::string_view>>(col_data)[i];
-                        } else {
-                            str = std::get<std::vector<std::string>>(col_data)[i];
-                        }
-
-                        uint32_t len = static_cast<uint32_t>(str.size());
-                        size_t old_size = key_buffer_.size();
-                        key_buffer_.resize(old_size + sizeof(uint32_t) + len);
-
-                        std::memcpy(key_buffer_.data() + old_size, &len, sizeof(uint32_t));
-                        if (len > 0) {
-                            std::memcpy(key_buffer_.data() + old_size + sizeof(uint32_t), str.data(), len);
-                        }
+                        str = std::get<std::vector<std::string>>(col_data)[i];
+                    }
+                    uint32_t len = static_cast<uint32_t>(str.size());
+                    size_t old_size = key_buffer_.size();
+                    key_buffer_.resize(old_size + sizeof(uint32_t) + len);
+                    std::memcpy(key_buffer_.data() + old_size, &len, sizeof(uint32_t));
+                    if (len > 0) {
+                        std::memcpy(key_buffer_.data() + old_size + sizeof(uint32_t), str.data(), len);
                     }
                 }
+            }
+        };
 
-                std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
-                auto& aggs = groups_.FindOrInsert(lookup_key, [&](std::string_view fresh_key) {
-                    return arena_.Alloc(fresh_key);
-                });
+        const bool only_count_all = has_count_all_ && factories_.size() == 1;
+        const bool count_all_plus_rest = has_count_all_ && factories_.size() > 1;
 
-                if (aggs.empty()) {
-                    aggs.reserve(factories_.size());
-                    for (auto& f : factories_) {
-                        aggs.push_back(f());
+        auto process_batch = [&](EngineBatch& batch) {
+            if (only_count_all) {
+                for (auto i : batch.selection) {
+                    build_key(batch, i);
+                    std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
+                    auto& slot = groups_.FindOrInsert(lookup_key, [&](std::string_view fresh_key) {
+                        return arena_.Alloc(fresh_key);
+                    });
+                    slot.count++;
+                }
+            } else if (count_all_plus_rest) {
+                for (auto i : batch.selection) {
+                    build_key(batch, i);
+                    std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
+                    auto& slot = groups_.FindOrInsert(lookup_key, [&](std::string_view fresh_key) {
+                        return arena_.Alloc(fresh_key);
+                    });
+                    slot.count++;
+                    if (slot.rest.empty()) {
+                        slot.rest.reserve(factories_.size() - 1);
+                        for (size_t f = 1; f < factories_.size(); ++f) {
+                            slot.rest.push_back(factories_[f].make());
+                        }
+                    }
+                    for (auto& agg : slot.rest) {
+                        agg->Next(batch, i);
                     }
                 }
-
-                for (auto& agg : aggs) {
-                    agg->Next(batch, i);
+            } else {
+                for (auto i : batch.selection) {
+                    build_key(batch, i);
+                    std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
+                    auto& slot = groups_.FindOrInsert(lookup_key, [&](std::string_view fresh_key) {
+                        return arena_.Alloc(fresh_key);
+                    });
+                    if (slot.rest.empty()) {
+                        slot.rest.reserve(factories_.size());
+                        for (auto& f : factories_) {
+                            slot.rest.push_back(f.make());
+                        }
+                    }
+                    for (auto& agg : slot.rest) {
+                        agg->Next(batch, i);
+                    }
                 }
             }
         };
@@ -194,10 +225,15 @@ std::optional<EngineBatch> Aggregate::GetNext() {
     EngineBatch result;
     result.names = group_names_;
 
-    auto& first_slot = groups_.GetSlot(cur_idx_);
-    
-    for (const auto& agg : first_slot.val) {
-        result.names.push_back(agg->GetName());
+    if (has_count_all_) {
+        result.names.push_back("COUNT(*)");
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.names.push_back(agg->GetName());
+        }
+    } else {
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.names.push_back(agg->GetName());
+        }
     }
 
     for (size_t i = 0; i < group_columns_.size(); ++i) {
@@ -208,8 +244,15 @@ std::optional<EngineBatch> Aggregate::GetNext() {
         }
     }
 
-    for (const auto& agg : first_slot.val) {
-        result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+    if (has_count_all_) {
+        result.columns.emplace_back(std::vector<int64_t>{});
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+        }
+    } else {
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+        }
     }
 
     for (auto& col : result.columns) {
@@ -247,9 +290,17 @@ std::optional<EngineBatch> Aggregate::GetNext() {
         }
 
         size_t agg_col_offset = group_columns_.size();
-        for (size_t i = 0; i < slot.val.size(); ++i) {
-            auto agg_res = slot.val[i]->GetResult();
-            AppendColumnValue(result.columns[agg_col_offset + i], GetColumnValue(agg_res, 0));
+        if (has_count_all_) {
+            std::get<std::vector<int64_t>>(result.columns[agg_col_offset]).push_back(slot.val.count);
+            for (size_t i = 0; i < slot.val.rest.size(); ++i) {
+                auto agg_res = slot.val.rest[i]->GetResult();
+                AppendColumnValue(result.columns[agg_col_offset + 1 + i], GetColumnValue(agg_res, 0));
+            }
+        } else {
+            for (size_t i = 0; i < slot.val.rest.size(); ++i) {
+                auto agg_res = slot.val.rest[i]->GetResult();
+                AppendColumnValue(result.columns[agg_col_offset + i], GetColumnValue(agg_res, 0));
+            }
         }
 
         result.selection.push_back(static_cast<RowIndex>(count++));

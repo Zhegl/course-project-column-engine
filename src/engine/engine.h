@@ -51,13 +51,13 @@ private:
 
 enum class GroupKeyType { Int, Str, Multi };
 
+
 class Aggregate : public Operator {
 public:
     using AggVec = std::vector<std::shared_ptr<Aggregator>>;
 
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
-              std::vector<std::string> group_names, std::vector<AggFactory> factories,
-              GroupKeyType key_type)
+              std::vector<std::string> group_names, std::vector<AggFactory> factories,  GroupKeyType key_type)
         : child_(std::move(child)),
           group_columns_(std::move(group_columns)),
           group_names_(std::move(group_names)),
@@ -77,9 +77,10 @@ private:
     std::vector<std::string> group_names_;
     std::vector<AggFactory> factories_;
 
-    std::optional<HashMap<int64_t, AggVec, IntHash>>    int_groups_;
-    std::optional<HashMap<std::string, AggVec, StrHash>> str_groups_;
-    std::optional<GroupHashMap<AggVec>>                  multi_groups_;
+    HashMap<std::string_view, AggVec, StringViewHash> groups_;
+    Arena arena_;
+    std::vector<char> key_buffer_;
+    std::vector<bool> is_string_column_;
 };
 
 class LimitOp : public Operator {

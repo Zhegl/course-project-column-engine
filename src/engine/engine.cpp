@@ -97,138 +97,166 @@ std::optional<EngineBatch> Filter::GetNext() {
 
 // Aggregate
 
-namespace {
-
-template <typename Map>
-void RunMap(Map& groups, std::shared_ptr<Operator>& child,
-            const std::vector<size_t>& group_columns,
-            const std::vector<AggFactory>& factories,
-            auto make_key) {
-    while (auto batch = child->GetNext()) {
-        for (auto i : batch->selection) {
-            auto& aggs = groups[make_key(*batch, i)];
-            if (aggs.empty()) {
-                for (auto& f : factories) {
-                    aggs.push_back(f());
-                }
-            }
-            for (auto& agg : aggs) {
-                agg->Next(*batch, i);
-            }
-        }
-    }
-}
-
-template <typename Map>
-std::optional<EngineBatch> GetNextMap(Map& groups, size_t& cur_idx,
-                                      const std::vector<std::string>& group_names,
-                                      const std::vector<AggFactory>& factories,
-                                      auto key_to_col_value) {
-    constexpr size_t kBatchSize = 1024;
-    if (cur_idx >= groups.Capacity()) {
-        return std::nullopt;
-    }
-
-    EngineBatch result;
-    result.names = group_names;
-    for (const auto& agg : groups.GetSlot(cur_idx).val) {
-        result.names.push_back(agg->GetName());
-    }
-    result.columns.push_back(MakeColumnData(key_to_col_value(groups.GetSlot(cur_idx).key)));
-    for (const auto& agg : groups.GetSlot(cur_idx).val) {
-        result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
-    }
-
-    size_t count = 0;
-    while (cur_idx < groups.Capacity() && count < kBatchSize) {
-        auto& slot = groups.GetSlot(cur_idx);
-        AppendColumnValue(result.columns[0], key_to_col_value(slot.key));
-        for (size_t i = 0; i < slot.val.size(); ++i) {
-            AppendColumnValue(result.columns[group_names.size() + i],
-                              GetColumnValue(slot.val[i]->GetResult(), 0));
-        }
-        result.selection.push_back(count++);
-        cur_idx = groups.NextUsed(cur_idx);
-    }
-
-    return result;
-}
-
-}  // namespace
-
 void Aggregate::Run() {
     ready_ = true;
-    size_t col = group_columns_.empty() ? 0 : group_columns_[0];
-    if (key_type_ == GroupKeyType::Int) {
-        int_groups_.emplace();
-        RunMap(*int_groups_, child_, group_columns_, factories_,
-               [col](EngineBatch& batch, RowIndex i) {
-                   return std::get<std::vector<int64_t>>(batch.columns[col])[i];
-               });
-        cur_idx_ = int_groups_->FirstUsed();
-    } else if (key_type_ == GroupKeyType::Str) {
-        str_groups_.emplace();
-        RunMap(*str_groups_, child_, group_columns_, factories_,
-               [col](EngineBatch& batch, RowIndex i) {
-                   return std::string(GetStrAt(batch.columns[col], i));
-               });
-        cur_idx_ = str_groups_->FirstUsed();
-    } else {
-        multi_groups_.emplace();
-        RunMap(*multi_groups_, child_, group_columns_, factories_,
-               [this](EngineBatch& batch, RowIndex i) {
-                   GroupKey key;
-                   key.values.reserve(group_columns_.size());
-                   for (size_t c : group_columns_) {
-                       key.values.push_back(GetColumnValue(batch.columns[c], i));
-                   }
-                   return key;
-               });
-        cur_idx_ = multi_groups_->FirstUsed();
+
+    enum class ColType { Int, Str };
+    std::vector<std::pair<size_t, ColType>> typed_columns;
+    typed_columns.reserve(group_columns_.size());
+    is_string_column_.assign(group_columns_.size(), false);
+
+    if (auto preview_batch = child_->GetNext()) {
+        for (size_t i = 0; i < group_columns_.size(); ++i) {
+            size_t col_idx = group_columns_[i];
+            const auto& col_data = preview_batch->columns[col_idx];
+
+            if (std::holds_alternative<std::vector<int64_t>>(col_data)) {
+                typed_columns.emplace_back(col_idx, ColType::Int);
+                is_string_column_[i] = false;
+            } else if (std::holds_alternative<std::vector<std::string_view>>(col_data) || 
+                       std::holds_alternative<std::vector<std::string>>(col_data)) {
+                typed_columns.emplace_back(col_idx, ColType::Str);
+                is_string_column_[i] = true;
+            } else {
+                throw std::runtime_error("Unsupported column type for aggregation key");
+            }
+        }
+
+        auto process_batch = [&](EngineBatch& batch) {
+            for (auto i : batch.selection) {
+                key_buffer_.clear();
+
+                for (const auto& [col_idx, type] : typed_columns) {
+                    const auto& col_data = batch.columns[col_idx];
+
+                    if (type == ColType::Int) {
+                        int64_t val = std::get<std::vector<int64_t>>(col_data)[i];
+                        size_t old_size = key_buffer_.size();
+                        key_buffer_.resize(old_size + sizeof(int64_t));
+                        std::memcpy(key_buffer_.data() + old_size, &val, sizeof(int64_t));
+                    } else {
+                        std::string_view str;
+                        if (std::holds_alternative<std::vector<std::string_view>>(col_data)) {
+                            str = std::get<std::vector<std::string_view>>(col_data)[i];
+                        } else {
+                            str = std::get<std::vector<std::string>>(col_data)[i];
+                        }
+
+                        uint32_t len = static_cast<uint32_t>(str.size());
+                        size_t old_size = key_buffer_.size();
+                        key_buffer_.resize(old_size + sizeof(uint32_t) + len);
+
+                        std::memcpy(key_buffer_.data() + old_size, &len, sizeof(uint32_t));
+                        if (len > 0) {
+                            std::memcpy(key_buffer_.data() + old_size + sizeof(uint32_t), str.data(), len);
+                        }
+                    }
+                }
+
+                std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
+                auto& aggs = groups_.FindOrInsert(lookup_key, [&](std::string_view fresh_key) {
+                    return arena_.Alloc(fresh_key);
+                });
+
+                if (aggs.empty()) {
+                    aggs.reserve(factories_.size());
+                    for (auto& f : factories_) {
+                        aggs.push_back(f());
+                    }
+                }
+
+                for (auto& agg : aggs) {
+                    agg->Next(batch, i);
+                }
+            }
+        };
+
+        process_batch(*preview_batch);
+
+        while (auto batch = child_->GetNext()) {
+            process_batch(*batch);
+        }
     }
+
+    cur_idx_ = groups_.FirstUsed();
 }
 
 std::optional<EngineBatch> Aggregate::GetNext() {
     if (!ready_) {
         Run();
     }
-    if (key_type_ == GroupKeyType::Int) {
-        return GetNextMap(*int_groups_, cur_idx_, group_names_, factories_,
-                         [](int64_t k) -> ColumnValue { return k; });
-    } else if (key_type_ == GroupKeyType::Str) {
-        return GetNextMap(*str_groups_, cur_idx_, group_names_, factories_,
-                         [](const std::string& k) -> ColumnValue { return k; });
-    } else {
-        constexpr size_t kBatchSize = 1024;
-        if (cur_idx_ >= multi_groups_->Capacity()) {
-            return std::nullopt;
-        }
-        EngineBatch result;
-        result.names = group_names_;
-        for (const auto& agg : multi_groups_->GetSlot(cur_idx_).val) {
-            result.names.push_back(agg->GetName());
-        }
-        for (const auto& v : multi_groups_->GetSlot(cur_idx_).key.values) {
-            result.columns.push_back(MakeColumnData(v));
-        }
-        for (const auto& agg : multi_groups_->GetSlot(cur_idx_).val) {
-            result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
-        }
-        size_t count = 0;
-        while (cur_idx_ < multi_groups_->Capacity() && count < kBatchSize) {
-            auto& slot = multi_groups_->GetSlot(cur_idx_);
-            for (size_t i = 0; i < slot.key.values.size(); ++i) {
-                AppendColumnValue(result.columns[i], slot.key.values[i]);
-            }
-            for (size_t i = 0; i < slot.val.size(); ++i) {
-                AppendColumnValue(result.columns[group_names_.size() + i],
-                                  GetColumnValue(slot.val[i]->GetResult(), 0));
-            }
-            result.selection.push_back(count++);
-            cur_idx_ = multi_groups_->NextUsed(cur_idx_);
-        }
-        return result;
+
+    constexpr size_t kBatchSize = 1024;
+    if (cur_idx_ >= groups_.Capacity()) {
+        return std::nullopt;
     }
+
+    EngineBatch result;
+    result.names = group_names_;
+
+    auto& first_slot = groups_.GetSlot(cur_idx_);
+    
+    for (const auto& agg : first_slot.val) {
+        result.names.push_back(agg->GetName());
+    }
+
+    for (size_t i = 0; i < group_columns_.size(); ++i) {
+        if (is_string_column_[i]) {
+            result.columns.emplace_back(std::vector<std::string_view>{});
+        } else {
+            result.columns.emplace_back(std::vector<int64_t>{});
+        }
+    }
+
+    for (const auto& agg : first_slot.val) {
+        result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+    }
+
+    for (auto& col : result.columns) {
+        std::visit([](auto& v) { v.reserve(kBatchSize); }, col);
+    }
+
+    size_t count = 0;
+    while (cur_idx_ < groups_.Capacity() && count < kBatchSize) {
+        if (!groups_.IsUsed(cur_idx_)) {
+            cur_idx_ = groups_.NextUsed(cur_idx_);
+            continue;
+        }
+
+        auto& slot = groups_.GetSlot(cur_idx_);
+        std::string_view key = slot.key;
+        size_t offset = 0;
+
+        for (size_t i = 0; i < group_columns_.size(); ++i) {
+            if (is_string_column_[i]) {
+                uint32_t len;
+                std::memcpy(&len, key.data() + offset, sizeof(uint32_t));
+                offset += sizeof(uint32_t);
+
+                std::string_view str_val(key.data() + offset, len);
+                offset += len;
+
+                std::get<std::vector<std::string_view>>(result.columns[i]).push_back(str_val);
+            } else {
+                int64_t int_val;
+                std::memcpy(&int_val, key.data() + offset, sizeof(int64_t));
+                offset += sizeof(int64_t);
+
+                std::get<std::vector<int64_t>>(result.columns[i]).push_back(int_val);
+            }
+        }
+
+        size_t agg_col_offset = group_columns_.size();
+        for (size_t i = 0; i < slot.val.size(); ++i) {
+            auto agg_res = slot.val[i]->GetResult();
+            AppendColumnValue(result.columns[agg_col_offset + i], GetColumnValue(agg_res, 0));
+        }
+
+        result.selection.push_back(static_cast<RowIndex>(count++));
+        cur_idx_ = groups_.NextUsed(cur_idx_);
+    }
+
+    return result;
 }
 
 std::optional<EngineBatch> LimitOp::GetNext() {

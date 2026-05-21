@@ -269,7 +269,25 @@ struct ColumnValueHash {
 
 struct StringViewHash {
     size_t operator()(std::string_view v) const {
-        return std::hash<std::string_view>{}(v);
+        static constexpr uint64_t kMul = 0x9e3779b97f4a7c15ULL;
+        const char* data = v.data();
+        size_t len = v.size();
+
+        uint64_t h = len;
+        size_t i = 0;
+        for (; i + 8 <= len; i += 8) {
+            uint64_t chunk;
+            __builtin_memcpy(&chunk, data + i, 8);
+            h ^= chunk;
+            h *= kMul;
+        }
+        if (i < len) {
+            uint64_t chunk = 0;
+            __builtin_memcpy(&chunk, data + i, len - i);
+            h ^= chunk;
+            h *= kMul;
+        }
+        return h;
     }
 };
 

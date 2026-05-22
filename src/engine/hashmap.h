@@ -89,7 +89,7 @@ public:
 
     template <typename LookupKey, typename CreatorF>
     Y& FindOrInsert(const LookupKey& lookup_key, CreatorF&& creator) {
-        size_t hash = Hash{}(lookup_key) % map_.size();
+        size_t hash = Hash{}(lookup_key) & (map_.size() - 1);
 
         while (true) {
             if (!is_used_[hash]) {
@@ -117,7 +117,7 @@ public:
         }
     }
     Y& operator[](const T& key) {
-        size_t hash = Hash{}(key) % map_.size();
+        size_t hash = Hash{}(key) & (map_.size() - 1);
 
         while (true) {
             if (!is_used_[hash]) {
@@ -226,7 +226,7 @@ private:
 
         for (size_t i = 0; i < map_.size(); ++i) {
             if (is_used_[i]) {
-                size_t hash = Hash{}(map_[i].key) % map.size();
+                size_t hash = Hash{}(map_[i].key) & (map.size() - 1);
                 while (is_used[hash]) {
                     ++hash;
                     if (hash == map.size()) {

@@ -56,7 +56,7 @@ class Aggregate : public Operator {
 public:
     struct AggSlot {
         int64_t count{0};
-        std::vector<std::shared_ptr<Aggregator>> rest;
+        std::vector<std::unique_ptr<Aggregator>> rest;
     };
 
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,

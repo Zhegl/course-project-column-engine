@@ -142,22 +142,14 @@ void Aggregate::ProcessBatch(EngineBatch& batch,
 
         if (has_count_all_) {
             slot.count++;
-            if (!only_count_all) {
-                if (slot.rest.empty()) {
-                    slot.rest.reserve(factories_.size() - 1);
-                    for (size_t f = 1; f < factories_.size(); ++f) {
-                        slot.rest.push_back(factories_[f].make());
-                    }
-                }
-                for (auto& agg : slot.rest) {
-                    agg->Next(batch, i);
-                }
-            }
-        } else {
+        }
+
+        if (!only_count_all) {
+            size_t first = has_count_all_ ? 1 : 0;
             if (slot.rest.empty()) {
-                slot.rest.reserve(factories_.size());
-                for (auto& f : factories_) {
-                    slot.rest.push_back(f.make());
+                slot.rest.reserve(factories_.size() - first);
+                for (size_t f = first; f < factories_.size(); ++f) {
+                    slot.rest.push_back(factories_[f].make());
                 }
             }
             for (auto& agg : slot.rest) {

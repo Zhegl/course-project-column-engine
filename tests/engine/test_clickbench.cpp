@@ -20,7 +20,7 @@ void ExpectResultMatches(const column_engine::QueryResult& result,
 class ClickBench : public ::testing::Test {
 protected:
     static void SetUpTestSuite() {
-        column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 8192);
+        column_engine::ConvertToColumnar("hits_sample.csv", "hits_schema.csv", "col.col", 500000);
     }
 };
 

@@ -193,7 +193,7 @@ std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::Par
         ++i;
 
         if (func == "COUNT" && col == "*") {
-            factories.push_back({[]() { return std::make_shared<CountAll>(); }, true});
+            factories.push_back({[]() { return std::make_unique<CountAll>(); }, true});
             agg_columns.push_back({"COUNT(*)", GetType("int64")});
             continue;
         }
@@ -206,32 +206,32 @@ std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> QueryParser::Par
         bool is_str = cur_schema_.columns[id].type->GetTypeName() == "string";
         if (func == "COUNT" && is_distinct) {
             if (is_str) {
-                factories.push_back({[id]() { return std::make_shared<StrCountDistinct>(id); }});
+                factories.push_back({[id]() { return std::make_unique<StrCountDistinct>(id); }});
             } else {
-                factories.push_back({[id]() { return std::make_shared<IntCountDistinct>(id); }});
+                factories.push_back({[id]() { return std::make_unique<IntCountDistinct>(id); }});
             }
             agg_columns.push_back({"COUNT(DISTINCT " + raw_col + ")", GetType("int64")});
         } else if (func == "SUM") {
-            factories.push_back({[id]() { return std::make_shared<IntSum>(id); }});
+            factories.push_back({[id]() { return std::make_unique<IntSum>(id); }});
             agg_columns.push_back({"SUM(" + raw_col + ")", GetType("int64")});
         } else if (func == "MIN") {
             if (is_str) {
-                factories.push_back({[id]() { return std::make_shared<StrMin>(id); }});
+                factories.push_back({[id]() { return std::make_unique<StrMin>(id); }});
                 agg_columns.push_back({"MIN(" + raw_col + ")", GetType("string")});
             } else {
-                factories.push_back({[id]() { return std::make_shared<IntMin>(id); }});
+                factories.push_back({[id]() { return std::make_unique<IntMin>(id); }});
                 agg_columns.push_back({"MIN(" + raw_col + ")", GetType("int64")});
             }
         } else if (func == "MAX") {
             if (is_str) {
-                factories.push_back({[id]() { return std::make_shared<StrMax>(id); }});
+                factories.push_back({[id]() { return std::make_unique<StrMax>(id); }});
                 agg_columns.push_back({"MAX(" + raw_col + ")", GetType("string")});
             } else {
-                factories.push_back({[id]() { return std::make_shared<IntMax>(id); }});
+                factories.push_back({[id]() { return std::make_unique<IntMax>(id); }});
                 agg_columns.push_back({"MAX(" + raw_col + ")", GetType("int64")});
             }
         } else if (func == "AVG") {
-            factories.push_back({[id]() { return std::make_shared<IntAvg>(id); }});
+            factories.push_back({[id]() { return std::make_unique<IntAvg>(id); }});
             agg_columns.push_back({"AVG(" + raw_col + ")", GetType("int64")});
         } else {
             throw std::runtime_error("Unknown aggregate function: " + func);

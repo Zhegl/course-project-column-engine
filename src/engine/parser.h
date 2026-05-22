@@ -11,7 +11,7 @@
 namespace column_engine::internal {
 
 struct AggFactory {
-    std::function<std::shared_ptr<Aggregator>()> make;
+    std::function<std::unique_ptr<Aggregator>()> make;
     bool is_count_all{false};
 };
 

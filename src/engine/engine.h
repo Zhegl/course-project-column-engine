@@ -56,7 +56,7 @@ class Aggregate : public Operator {
 public:
     struct AggSlot {
         int64_t count{0};
-        std::vector<std::shared_ptr<Aggregator>> rest;
+        std::vector<std::unique_ptr<Aggregator>> rest;
     };
 
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
@@ -70,10 +70,23 @@ public:
           key_type_(key_type) {
     }
 
+    struct ColDesc {
+        size_t col_idx;
+        bool is_str;
+    };
+
+    struct ColPtr {
+        const int64_t* ints;
+        const std::string_view* svs;
+        const std::string* strs;
+    };
+
     std::optional<EngineBatch> GetNext() override;
 
 private:
     void Run();
+    void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs, bool only_count_all);
+
     bool ready_{false};
     size_t cur_idx_{0};
     bool has_count_all_{false};

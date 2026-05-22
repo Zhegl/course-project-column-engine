@@ -20,7 +20,7 @@ ApiPipeline ApiPipeline::Count(std::string arg) {
             root_,
             std::vector<size_t>{},
             std::vector<std::string>{},
-            std::vector<AggFactory>{{[]() { return std::make_shared<CountAll>(); }, true}},
+            std::vector<AggFactory>{{[]() { return std::make_unique<CountAll>(); }, true}},
             std::vector<std::string>{"COUNT(*)"},
             GroupKeyType::Multi);
         return *this;

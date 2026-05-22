@@ -169,7 +169,6 @@ public:
 private:
     size_t id_a_;
     std::string infix_;
-    uint16_t jmp_[256];
 };
 
 class StrNotLike : public FilterPredicate {

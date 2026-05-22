@@ -1,5 +1,6 @@
 #include "engine/predicates.h"
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <stdexcept>
 #include <string_view>
@@ -85,29 +86,22 @@ StrLike::StrLike(size_t id_a, std::string pattern) : id_a_(id_a), infix_(std::mo
     if (infix_.front() != '%' || infix_.back() != '%') {
         throw std::runtime_error("Use RegExp");
     }
-    for (size_t c = 0; c < 256; ++c) {
-        jmp_[c] = infix_.size() - 2;
-    }
-    for (size_t i = infix_.size() - 3; i > 0; --i) {
-        jmp_[static_cast<uint8_t>(infix_[i])] = std::min(jmp_[static_cast<uint8_t>(infix_[i])], static_cast<uint16_t>(infix_.size() - 2 - i));
-    }
 }
 
 bool StrLike::Check(EngineBatch& batch, RowIndex i) {
     const auto& str = GetStrAt(batch.columns[id_a_], i);
-    size_t c = infix_.size() - 3;
-    while (c < str.size()) {
-        size_t j = 0;
-        while (j < infix_.size() - 2) {
-            if (str[c - j] != infix_[infix_.size() - 2 - j]) {
-                c += jmp_[static_cast<uint8_t>(str[c])];
-                break;
-            }
-            ++j;
-        }
-        if (j == infix_.size() - 2) {
+    const char* pat = infix_.data() + 1;
+    size_t m = infix_.size() - 2;
+    if (str.size() < m) {
+        return false;
+    }
+    const char* s = str.data();
+    const char* end = s + str.size() - m;
+    while ((s = static_cast<const char*>(std::memchr(s, pat[0], end - s + 1)))) {
+        if (std::memcmp(s, pat, m) == 0) {
             return true;
         }
+        ++s;
     }
     return false;
 }

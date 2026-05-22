@@ -1,4 +1,5 @@
 #include "types.h"
+#include <sys/mman.h>
 #include <sys/types.h>
 #include <cstdint>
 #include <map>
@@ -99,14 +100,13 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     uint16_t n_uwords = reader.Read<uint16_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
 
-    const char* offsets_raw = reinterpret_cast<const char*>(
-        reader.Peek((n_uwords + 1) * sizeof(uint32_t))
-    );
+    char* offsets_raw = reader.Peek((n_uwords + 1) * sizeof(uint32_t));
 
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
     size_t raw_size = final_offset - header_size;
-    const char* raw = reader.Peek(raw_size);
+    char* raw = reader.Peek(raw_size);
+    madvise(static_cast<void*>(raw), raw_size, MADV_WILLNEED);
 
     ColumnTypeInt64 helper;
     auto indices_data = helper.GetBatch(0, reader);

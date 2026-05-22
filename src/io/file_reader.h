@@ -30,8 +30,8 @@ public:
         return result;
     }
 
-    const char* Peek(size_t size) {
-        const char* ptr = base_ + pos_;
+    char* Peek(size_t size) {
+        char* ptr = base_ + pos_;
         pos_ += size;
         return ptr;
     }

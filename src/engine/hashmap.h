@@ -70,6 +70,7 @@ template <typename T, typename Y>
 struct Slot {
     T key;
     Y val;
+    size_t hash{0};
 };
 
 template <typename T>
@@ -89,12 +90,14 @@ public:
 
     template <typename LookupKey, typename CreatorF>
     Y& FindOrInsert(const LookupKey& lookup_key, CreatorF&& creator) {
-        size_t hash = Hash{}(lookup_key) & (map_.size() - 1);
+        size_t raw_hash = Hash{}(lookup_key);
+        size_t hash = raw_hash & (map_.size() - 1);
 
         while (true) {
             if (!is_used_[hash]) {
                 T permanent_key = creator(lookup_key);
                 map_[hash].key = permanent_key;
+                map_[hash].hash = raw_hash;
                 is_used_[hash] = true;
                 size_++;
 
@@ -105,8 +108,8 @@ public:
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] && 
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(lookup_key) ? true : map_[hash].key == lookup_key)) 
+            if (is_used_[hash] &&
+                (IsEmptyKey(map_[hash].key) && IsEmptyKey(lookup_key) ? true : map_[hash].key == lookup_key))
             {
                 return map_[hash].val;
             }
@@ -117,11 +120,13 @@ public:
         }
     }
     Y& operator[](const T& key) {
-        size_t hash = Hash{}(key) & (map_.size() - 1);
+        size_t raw_hash = Hash{}(key);
+        size_t hash = raw_hash & (map_.size() - 1);
 
         while (true) {
             if (!is_used_[hash]) {
                 map_[hash].key = key;
+                map_[hash].hash = raw_hash;
                 is_used_[hash] = true;
                 size_++;
 
@@ -132,8 +137,8 @@ public:
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] && 
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(key) ? true : map_[hash].key == key)) 
+            if (is_used_[hash] &&
+                (IsEmptyKey(map_[hash].key) && IsEmptyKey(key) ? true : map_[hash].key == key))
             {
                 return map_[hash].val;
             }
@@ -226,7 +231,7 @@ private:
 
         for (size_t i = 0; i < map_.size(); ++i) {
             if (is_used_[i]) {
-                size_t hash = Hash{}(map_[i].key) & (map.size() - 1);
+                size_t hash = map_[i].hash & (map.size() - 1);
                 while (is_used[hash]) {
                     ++hash;
                     if (hash == map.size()) {

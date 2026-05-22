@@ -1,8 +1,4 @@
 #include "engine/predicates.h"
-#include <cstdint>
-#include <cstring>
-#include <exception>
-#include <stdexcept>
 #include <string_view>
 
 namespace column_engine::internal {
@@ -81,29 +77,52 @@ std::vector<RowIndex> StrConstEQ::CheckBatch(EngineBatch& batch, const std::vect
     return result;
 }
 
+static bool LikeMatch(const std::string_view str, const std::string& pattern) {
+    std::vector<std::string_view> parts;
+    size_t start = 0;
+    bool anchored_start = !pattern.empty() && pattern[0] != '%';
+    bool anchored_end = !pattern.empty() && pattern.back() != '%';
+    for (size_t i = 0; i <= pattern.size(); ++i) {
+        if (i == pattern.size() || pattern[i] == '%') {
+            if (i > start) {
+                parts.emplace_back(pattern.data() + start, i - start);
+            }
+            start = i + 1;
+        }
+    }
+    if (parts.empty()) {
+        return true;
+    }
+    size_t pos = 0;
+    for (size_t pi = 0; pi < parts.size(); ++pi) {
+        const auto& part = parts[pi];
+        if (pi == 0 && anchored_start) {
+            if (!str.starts_with(part)) {
+                return false;
+            }
+            pos = part.size();
+        } else if (pi == parts.size() - 1 && anchored_end) {
+            if (str.size() < pos + part.size()) {
+                return false;
+            }
+            return str.compare(str.size() - part.size(), part.size(), part.data(), part.size()) ==
+                   0;
+        } else {
+            size_t found = str.find(part.data(), pos, part.size());
+            if (found == std::string::npos) {
+                return false;
+            }
+            pos = found + part.size();
+        }
+    }
+    return true;
+}
 
 StrLike::StrLike(size_t id_a, std::string pattern) : id_a_(id_a), infix_(std::move(pattern)) {
-    if (infix_.front() != '%' || infix_.back() != '%') {
-        throw std::runtime_error("Use RegExp");
-    }
 }
 
 bool StrLike::Check(EngineBatch& batch, RowIndex i) {
-    const auto& str = GetStrAt(batch.columns[id_a_], i);
-    const char* pat = infix_.data() + 1;
-    size_t m = infix_.size() - 2;
-    if (str.size() < m) {
-        return false;
-    }
-    const char* s = str.data();
-    const char* end = s + str.size() - m;
-    while ((s = static_cast<const char*>(std::memchr(s, pat[0], end - s + 1)))) {
-        if (std::memcmp(s, pat, m) == 0) {
-            return true;
-        }
-        ++s;
-    }
-    return false;
+    return LikeMatch(GetStrAt(batch.columns[id_a_], i), infix_);
 }
 
 StrNotLike::StrNotLike(size_t id_a, std::string pattern) : inner_(id_a, std::move(pattern)) {

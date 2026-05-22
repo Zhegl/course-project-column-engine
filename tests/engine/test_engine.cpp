@@ -438,7 +438,6 @@ TEST_F(EngineTest, WhereLike) {
     ASSERT_EQ(result.size(), 3u);
 }
 
-/*
 TEST_F(EngineTest, WhereLikePrefix) {
     column_engine::Engine engine("test.col");
     auto result = engine.Api().Where("name LIKE item_%").Select("id").Run();
@@ -449,11 +448,11 @@ TEST_F(EngineTest, WhereLikeSuffix) {
     column_engine::Engine engine("test.col");
     auto result = engine.Api().Where("name LIKE %_5").Select("id").Run();
     ASSERT_EQ(result.size(), 2u);  // item_5
-}*/
+}
 
 TEST_F(EngineTest, WhereNotLike) {
     column_engine::Engine engine("test.col");
-    auto result = engine.Api().Where("name NOT LIKE %_10%").Select("id").Run();
+    auto result = engine.Api().Where("name NOT LIKE %_10").Select("id").Run();
     ASSERT_EQ(result.size(), 10u);  // all except item_10
 }
 

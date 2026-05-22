@@ -1,5 +1,4 @@
 #pragma once
-#include <cstdint>
 #include <string>
 #include <string_view>
 #include <unordered_set>
@@ -168,6 +167,8 @@ public:
     bool Check(EngineBatch& batch, RowIndex i) override;
 private:
     size_t id_a_;
+    std::string prefix_;
+    std::string suffix_;
     std::string infix_;
 };
 

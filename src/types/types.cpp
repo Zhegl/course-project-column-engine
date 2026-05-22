@@ -193,7 +193,7 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     const size_t block_size = 512;
     const size_t rle_decision = 5;
 
-    uint16_t blocks = static_cast<uint16_t>((data.size() + block_size - 1) / block_size);
+    uint32_t blocks = static_cast<uint32_t>((data.size() + block_size - 1) / block_size);
     uint32_t n_values = static_cast<uint32_t>(data.size());
 
     size_t result = 0;
@@ -275,7 +275,7 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
 
     bool rle = reader.Read<bool>();
     uint32_t n_values = reader.Read<uint32_t>();
-    uint16_t blocks = reader.Read<uint16_t>();
+    uint32_t blocks = reader.Read<uint32_t>();
 
     for (size_t i = 0; i < blocks; ++i) {
         min_val.push_back(reader.Read<int64_t>());

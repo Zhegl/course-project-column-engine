@@ -42,7 +42,11 @@ inline ColumnData MakeEmptyColumnLike(const ColumnData& column) {
     return std::visit(
         [](const auto& v) -> ColumnData {
             using T = typename std::decay_t<decltype(v)>::value_type;
-            return std::vector<T>{};
+            if constexpr (std::is_same_v<T, std::string_view>) {
+                return std::vector<std::string>{};
+            } else {
+                return std::vector<T>{};
+            }
         },
         column);
 }
@@ -72,13 +76,22 @@ inline void AppendSelectedValues(ColumnData& dst, const ColumnData& src,
                                  const std::vector<RowIndex>& selection, size_t limit = 0) {
     std::visit(
         [&](auto& out, const auto& in) {
-            if constexpr (std::is_same_v<std::decay_t<decltype(out)>,
-                                         std::decay_t<decltype(in)>>) {
+            using Out = std::decay_t<decltype(out)>;
+            using In = std::decay_t<decltype(in)>;
+            if constexpr (std::is_same_v<Out, In>) {
                 for (auto i : selection) {
                     if (limit != 0 && out.size() >= limit) {
                         break;
                     }
                     out.push_back(in[i]);
+                }
+            } else if constexpr (std::is_same_v<Out, std::vector<std::string>> &&
+                                 std::is_same_v<In, std::vector<std::string_view>>) {
+                for (auto i : selection) {
+                    if (limit != 0 && out.size() >= limit) {
+                        break;
+                    }
+                    out.emplace_back(in[i]);
                 }
             }
         },

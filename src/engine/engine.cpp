@@ -3,6 +3,7 @@
 #include "column_utils.h"
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
+#include <types/types.h>
 #include <glog/logging.h>
 #include <algorithm>
 #include <memory>
@@ -67,12 +68,19 @@ std::optional<EngineBatch> Scan::GetNext() {
         }
     }
 
+    string_bufs_.resize(columns_.size());
     EngineBatch result;
-    for (size_t col : columns_) {
+    for (size_t k = 0; k < columns_.size(); ++k) {
+        size_t col = columns_[k];
         const auto& meta = batch_meta_[rg * cols + col];
         reader_.Jump(meta.offset - reader_.GetPos());
         result.names.push_back(schema_.columns[col].name);
-        result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_));
+        auto* str_type = dynamic_cast<ColumnTypeString*>(schema_.columns[col].type.get());
+        if (str_type) {
+            result.columns.emplace_back(str_type->GetBatch(meta.size, reader_, string_bufs_[k]));
+        } else {
+            result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_));
+        }
     }
 
     size_t num_rows = GetColumnSize(result.columns[0]);

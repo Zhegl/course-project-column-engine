@@ -136,7 +136,7 @@ size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& wr
     return result;
 }
 
-ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader, std::string& buf) {
     uint32_t n_words = reader.Read<uint32_t>();
     uint32_t n_uwords = reader.Read<uint32_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
@@ -153,27 +153,43 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
     auto indices_data = helper.GetBatch(0, reader);
     const auto& indices = std::get<std::vector<int64_t>>(indices_data);
 
-    std::vector<std::string> result;
+    size_t total_chars = 0;
+    for (size_t k = 0; k < indices.size(); ++k) {
+        auto pos = static_cast<size_t>(indices[k]);
+        uint32_t cur_off, next_off;
+        std::memcpy(&cur_off, offsets_raw + pos * sizeof(uint32_t), sizeof(uint32_t));
+        std::memcpy(&next_off, offsets_raw + (pos + 1) * sizeof(uint32_t), sizeof(uint32_t));
+        total_chars += next_off - cur_off;
+    }
+
+    buf.clear();
+    buf.reserve(total_chars);
+    std::vector<std::string_view> result;
     result.reserve(n_words);
     size_t j = 0;
     for (size_t i = 0; i < n_words; ++i) {
-        result.emplace_back();
-
+        size_t start = buf.size();
         while (1) {
             auto pos = static_cast<size_t>(indices[j]);
             ++j;
             uint32_t cur_off, next_off;
             std::memcpy(&cur_off, offsets_raw + pos * sizeof(uint32_t), sizeof(uint32_t));
             std::memcpy(&next_off, offsets_raw + (pos + 1) * sizeof(uint32_t), sizeof(uint32_t));
-            result.back().append(raw + cur_off, next_off - cur_off);
-            if (result.back().back() == '\0') {
-                result.back().pop_back();
+            buf.append(raw + cur_off, next_off - cur_off);
+            if (buf.back() == '\0') {
+                buf.pop_back();
                 break;
             }
         }
+        result.emplace_back(buf.data() + start, buf.size() - start);
     }
 
     return result;
+}
+
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
+    std::string buf;
+    return GetBatch(size, reader, buf);
 }
 
 std::string ColumnTypeInt64::GetTypeName() {

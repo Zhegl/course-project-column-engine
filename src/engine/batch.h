@@ -5,7 +5,7 @@
 #include <types/types.h>
 
 namespace column_engine::internal {
-using RowIndex = uint32_t;
+using RowIndex = uint16_t;
 
 struct EngineBatch {
     std::vector<std::string> names;

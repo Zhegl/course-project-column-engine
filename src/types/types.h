@@ -27,7 +27,6 @@ public:
     ColumnValue ConvertType(std::string val) override;
     std::string GetTypeName() override;
     ColumnData GetBatch(size_t size, FileReader& reader) override;
-    ColumnData GetBatch(size_t size, FileReader& reader, std::string& buf);
     size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) override;
     ~ColumnTypeString() override = default;
 };

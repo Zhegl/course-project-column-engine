@@ -34,7 +34,6 @@ private:
     std::vector<size_t> columns_;
     size_t current_row_group_ = 0;
     size_t num_row_groups_ = 0;
-    std::vector<std::string> string_bufs_;
 };
 
 class Filter : public Operator {

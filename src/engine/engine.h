@@ -54,6 +54,11 @@ enum class GroupKeyType { Int, Str, Multi };
 
 class Aggregate : public Operator {
 public:
+    struct AggSlot {
+        int64_t count{0};
+        std::vector<std::unique_ptr<Aggregator>> rest;
+    };
+
     Aggregate(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
               std::vector<std::string> group_names, std::vector<AggFactory> factories,
               std::vector<std::string> agg_names, GroupKeyType key_type)
@@ -63,15 +68,6 @@ public:
           factories_(std::move(factories)),
           agg_names_(std::move(agg_names)),
           key_type_(key_type) {
-    }
-
-    ~Aggregate() {
-        for (size_t g = 0; g < num_groups_; ++g) {
-            char* state = reinterpret_cast<char*>(states_.data()) + g * total_state_size_;
-            for (size_t a = 0; a < aggs_.size(); ++a) {
-                aggs_[a]->Destroy(state + agg_offsets_[a]);
-            }
-        }
     }
 
     struct ColDesc {
@@ -89,10 +85,11 @@ public:
 
 private:
     void Run();
-    void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs);
+    void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs, bool only_count_all);
 
     bool ready_{false};
     size_t cur_idx_{0};
+    bool has_count_all_{false};
     GroupKeyType key_type_;
     std::shared_ptr<Operator> child_;
     std::vector<size_t> group_columns_;
@@ -100,14 +97,8 @@ private:
     std::vector<std::string> agg_names_;
     std::vector<AggFactory> factories_;
 
-    std::vector<std::unique_ptr<Aggregator>> aggs_;
-    std::vector<size_t> agg_offsets_;
-    size_t total_state_size_{0};
-
-    HashMap<std::string_view, size_t, StringViewHash> groups_;
-    Arena key_arena_;
-    std::vector<std::max_align_t> states_;  // states_[group_idx * total_state_size_ / sizeof(max_align_t)]
-    size_t num_groups_{0};
+    HashMap<std::string_view, AggSlot, StringViewHash> groups_;
+    Arena arena_;
     std::vector<char> key_buffer_;
     std::vector<bool> is_string_column_;
 };

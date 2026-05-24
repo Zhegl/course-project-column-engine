@@ -79,6 +79,9 @@ std::optional<EngineBatch> Scan::GetNext() {
         result.names.push_back(schema_.columns[col].name);
         const ScanOptions* opts = (!scan_options_.empty() && scan_options_[k]) ? scan_options_[k].get() : nullptr;
         result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_, opts));
+        if (GetColumnSize(result.columns.back()) == 0 && opts != nullptr) {
+            return GetNext();
+        }
     }
 
     size_t num_rows = GetColumnSize(result.columns[0]);

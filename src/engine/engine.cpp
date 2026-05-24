@@ -50,6 +50,10 @@ void Scan::SetColumns(std::vector<size_t> columns) {
     columns_ = columns;
 }
 
+void Scan::SetScanOptions(std::vector<std::shared_ptr<ScanOptions>> options) {
+    scan_options_ = std::move(options);
+}
+
 std::optional<EngineBatch> Scan::GetNext() {
     if (current_row_group_ >= num_row_groups_) {
         return std::nullopt;
@@ -68,11 +72,13 @@ std::optional<EngineBatch> Scan::GetNext() {
     }
 
     EngineBatch result;
-    for (size_t col : columns_) {
+    for (size_t k = 0; k < columns_.size(); ++k) {
+        size_t col = columns_[k];
         const auto& meta = batch_meta_[rg * cols + col];
         reader_.Jump(meta.offset - reader_.GetPos());
         result.names.push_back(schema_.columns[col].name);
-        result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_));
+        const ScanOptions* opts = (!scan_options_.empty() && scan_options_[k]) ? scan_options_[k].get() : nullptr;
+        result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_, opts));
     }
 
     size_t num_rows = GetColumnSize(result.columns[0]);

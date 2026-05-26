@@ -3,6 +3,10 @@
 #include <convert/convert.h>
 #include <glog/logging.h>
 #include <io/file_writer.h>
+#include <io/file_reader.h>
+#include <types/types.h>
+#include <types/scan_options.h>
+#include <engine/bloom.h>
 
 
 namespace {
@@ -835,6 +839,84 @@ TEST_F(EngineTest, AddStringLiteral) {
     for (size_t i = 1; i < result.size(); ++i) { counts[result[i][0]] = result[i][1]; }
     EXPECT_EQ(counts["yes"], "5");
     EXPECT_EQ(counts["no"], "5");
+}
+
+// --- Bloom filter direct tests ---
+
+class BloomTest : public ::testing::Test {
+protected:
+    static constexpr const char* kPath = "bloom_test.col";
+
+    static void WriteStringBatch(const std::vector<std::string>& strs) {
+        column_engine::FileWriter writer(kPath);
+        column_engine::ColumnTypeString type;
+        std::vector<column_engine::ColumnValue> data;
+        for (const auto& s : strs) data.emplace_back(s);
+        type.WriteType(data, writer);
+    }
+
+    static std::pair<column_engine::ColumnData, std::unique_ptr<column_engine::FileReader>>
+    ReadStringBatch(const column_engine::ScanOptions* opts = nullptr) {
+        auto reader = std::make_unique<column_engine::FileReader>(kPath);
+        column_engine::ColumnTypeString type;
+        auto data = type.GetBatch(reader->Size(), *reader, opts);
+        return {std::move(data), std::move(reader)};
+    }
+};
+
+TEST_F(BloomTest, RoundtripNoOptions) {
+    WriteStringBatch({"hello", "world", "foo"});
+    auto [data, reader] = ReadStringBatch();
+    const auto& v = std::get<std::vector<std::string_view>>(data);
+    ASSERT_EQ(v.size(), 3u);
+    EXPECT_EQ(v[0], "hello");
+    EXPECT_EQ(v[1], "world");
+    EXPECT_EQ(v[2], "foo");
+}
+
+TEST_F(BloomTest, SkipEmptyBatchWhenAllEmpty) {
+    WriteStringBatch({"", "", ""});
+    column_engine::StringScanOptions opts;
+    opts.skip_empty = true;
+    auto [data, reader] = ReadStringBatch(&opts);
+    const auto& v = std::get<std::vector<std::string_view>>(data);
+    EXPECT_EQ(v.size(), 0u);
+}
+
+TEST_F(BloomTest, DontSkipBatchWithNonEmpty) {
+    WriteStringBatch({"hello", "", "world"});
+    column_engine::StringScanOptions opts;
+    opts.skip_empty = true;
+    auto [data, reader] = ReadStringBatch(&opts);
+    const auto& v = std::get<std::vector<std::string_view>>(data);
+    EXPECT_EQ(v.size(), 3u);
+}
+
+TEST_F(BloomTest, BloomMatchesPattern) {
+    WriteStringBatch({"hello world", "foo bar", "test string"});
+    column_engine::StringScanOptions opts;
+    opts.bloom = std::make_shared<column_engine::internal::BloomFilter>(256);
+    opts.bloom->Add("world");
+    auto [data, reader] = ReadStringBatch(&opts);
+    const auto& v = std::get<std::vector<std::string_view>>(data);
+    EXPECT_EQ(v.size(), 3u);
+}
+
+TEST_F(BloomTest, BloomSkipsBatchWithoutPattern) {
+    WriteStringBatch({"hello", "foo", "bar"});
+    column_engine::StringScanOptions opts;
+    opts.bloom = std::make_shared<column_engine::internal::BloomFilter>(256);
+    opts.bloom->Add("zzzzzzzzzzzzz");
+    auto [data, reader] = ReadStringBatch(&opts);
+    const auto& v = std::get<std::vector<std::string_view>>(data);
+    EXPECT_EQ(v.size(), 0u);
+}
+
+TEST_F(BloomTest, WhereNeEmptySkipsBatch) {
+    column_engine::ConvertToColumnar("input.csv", "schema.csv", "test_bloom.col", 10);
+    column_engine::Engine engine("test_bloom.col");
+    auto result = engine.Api().Where("group <> ''").Select("id").Run();
+    ASSERT_EQ(result.size(), 11u);
 }
 
 }  // namespace

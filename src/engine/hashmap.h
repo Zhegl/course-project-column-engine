@@ -71,6 +71,7 @@ struct Slot {
     T key;
     Y val;
     size_t hash{0};
+    bool occupied{false};
 };
 
 template <typename T>
@@ -85,7 +86,7 @@ inline bool IsEmptyKey(std::string_view v) {
 template <typename T, typename Y, typename Hash>
 class HashMap {
 public:
-    HashMap() : map_(8), is_used_(8) {
+    HashMap() : map_(8) {
     }
 
     template <typename LookupKey, typename CreatorF>
@@ -94,11 +95,11 @@ public:
         size_t hash = raw_hash & (map_.size() - 1);
 
         while (true) {
-            if (!is_used_[hash]) {
+            if (!map_[hash].occupied) {
                 T permanent_key = creator(lookup_key);
                 map_[hash].key = permanent_key;
                 map_[hash].hash = raw_hash;
-                is_used_[hash] = true;
+                map_[hash].occupied = true;
                 size_++;
 
                 if (size_ * 2 > map_.size()) {
@@ -108,9 +109,7 @@ public:
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] &&
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(lookup_key) ? true : map_[hash].key == lookup_key))
-            {
+            if (map_[hash].key == lookup_key) {
                 return map_[hash].val;
             }
             ++hash;
@@ -119,27 +118,26 @@ public:
             }
         }
     }
+
     Y& operator[](const T& key) {
         size_t raw_hash = Hash{}(key);
         size_t hash = raw_hash & (map_.size() - 1);
 
         while (true) {
-            if (!is_used_[hash]) {
+            if (!map_[hash].occupied) {
                 map_[hash].key = key;
                 map_[hash].hash = raw_hash;
-                is_used_[hash] = true;
+                map_[hash].occupied = true;
                 size_++;
 
-                if (size_ * 10 > map_.size() * 5) {
+                if (size_ * 2 > map_.size()) {
                     Rebuild();
                     return operator[](key);
                 }
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] &&
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(key) ? true : map_[hash].key == key))
-            {
+            if (map_[hash].key == key) {
                 return map_[hash].val;
             }
 
@@ -159,7 +157,6 @@ public:
     }
 
     struct Iterator {
-        const std::vector<char>* is_used;
         std::vector<Slot<T, Y>>* map;
         size_t idx;
 
@@ -172,7 +169,7 @@ public:
 
         Iterator& operator++() {
             ++idx;
-            while (idx < map->size() && !(*is_used)[idx]) {
+            while (idx < map->size() && !(*map)[idx].occupied) {
                 ++idx;
             }
             return *this;
@@ -190,7 +187,7 @@ public:
         return map_.size();
     }
     bool IsUsed(size_t idx) const {
-        return is_used_[idx];
+        return map_[idx].occupied;
     }
     Slot<T, Y>& GetSlot(size_t idx) {
         return map_[idx];
@@ -198,7 +195,7 @@ public:
 
     size_t FirstUsed() const {
         size_t idx = 0;
-        while (idx < map_.size() && !is_used_[idx]) {
+        while (idx < map_.size() && !map_[idx].occupied) {
             ++idx;
         }
         return idx;
@@ -206,7 +203,7 @@ public:
 
     size_t NextUsed(size_t idx) const {
         ++idx;
-        while (idx < map_.size() && !is_used_[idx]) {
+        while (idx < map_.size() && !map_[idx].occupied) {
             ++idx;
         }
         return idx;
@@ -214,40 +211,36 @@ public:
 
     Iterator Begin() {
         size_t idx = 0;
-        while (idx < map_.size() && !is_used_[idx]) {
+        while (idx < map_.size() && !map_[idx].occupied) {
             ++idx;
         }
-        return {&is_used_, &map_, idx};
+        return {&map_, idx};
     }
 
     Iterator End() {
-        return {&is_used_, &map_, map_.size()};
+        return {&map_, map_.size()};
     }
 
 private:
     void Rebuild() {
-        std::vector<char> is_used(map_.size() * 2, 0);
-        std::vector<Slot<T, Y>> map = std::vector<Slot<T, Y>>(map_.size() * 2);
+        std::vector<Slot<T, Y>> map(map_.size() * 2);
 
         for (size_t i = 0; i < map_.size(); ++i) {
-            if (is_used_[i]) {
+            if (map_[i].occupied) {
                 size_t hash = map_[i].hash & (map.size() - 1);
-                while (is_used[hash]) {
+                while (map[hash].occupied) {
                     ++hash;
                     if (hash == map.size()) {
                         hash = 0;
                     }
                 }
-                is_used[hash] = true;
                 map[hash] = std::move(map_[i]);
             }
         }
 
-        is_used_ = std::move(is_used);
         map_ = std::move(map);
     }
 
-    std::vector<char> is_used_;
     std::vector<Slot<T, Y>> map_;
     size_t size_{0};
 };

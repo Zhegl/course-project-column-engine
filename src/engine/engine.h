@@ -100,6 +100,9 @@ private:
     HashMap<std::string_view, AggSlot, StringViewHash> groups_;
     Arena arena_;
     std::vector<char> key_buffer_;
+    std::vector<char> prefetch_key_buf_;
+    std::vector<size_t> prefetch_hashes_;
+    std::vector<std::pair<size_t, size_t>> prefetch_key_spans_;
     std::vector<bool> is_string_column_;
 };
 

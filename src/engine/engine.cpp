@@ -123,8 +123,37 @@ void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col
     const size_t n = sel.size();
     constexpr size_t kPrefetch = 16;
     size_t hash_ring[kPrefetch];
+    char tmp_buf[256];
 
-    auto compute_hash = [&](RowIndex i) -> size_t {
+    auto prefetch_row = [&](RowIndex i, size_t slot) {
+        size_t pos = 0;
+        for (size_t k = 0; k < col_descs.size(); ++k) {
+            if (!col_descs[k].is_str) {
+                __builtin_memcpy(tmp_buf + pos, &ptrs[k].ints[i], sizeof(int64_t));
+                pos += sizeof(int64_t);
+            } else {
+                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
+                uint32_t len = static_cast<uint32_t>(sv.size());
+                __builtin_memcpy(tmp_buf + pos, &len, sizeof(uint32_t));
+                pos += sizeof(uint32_t);
+                __builtin_memcpy(tmp_buf + pos, sv.data(), len);
+                pos += len;
+            }
+        }
+        hash_ring[slot] = StringViewHash{}({tmp_buf, pos});
+        groups_.Prefetch(hash_ring[slot]);
+    };
+
+    for (size_t p = 0; p < std::min(kPrefetch, n); ++p) {
+        prefetch_row(sel[p], p);
+    }
+
+    for (size_t p = 0; p < n; ++p) {
+        if (p + kPrefetch < n) {
+            prefetch_row(sel[p + kPrefetch], (p + kPrefetch) % kPrefetch);
+        }
+
+        RowIndex i = sel[p];
         size_t pos = 0;
         for (size_t k = 0; k < col_descs.size(); ++k) {
             if (!col_descs[k].is_str) {
@@ -135,38 +164,6 @@ void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col
                 std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
                 uint32_t len = static_cast<uint32_t>(sv.size());
                 if (pos + sizeof(uint32_t) + len > key_buffer_.size()) { key_buffer_.resize(pos + sizeof(uint32_t) + len); }
-                __builtin_memcpy(key_buffer_.data() + pos, &len, sizeof(uint32_t));
-                pos += sizeof(uint32_t);
-                __builtin_memcpy(key_buffer_.data() + pos, sv.data(), len);
-                pos += len;
-            }
-        }
-        return StringViewHash{}({key_buffer_.data(), pos});
-    };
-
-    // prewarm: prefetch first kPrefetch slots
-    for (size_t p = 0; p < std::min(kPrefetch, n); ++p) {
-        hash_ring[p] = compute_hash(sel[p]);
-        groups_.Prefetch(hash_ring[p]);
-    }
-
-    for (size_t p = 0; p < n; ++p) {
-        // prefetch slot kPrefetch rows ahead
-        if (p + kPrefetch < n) {
-            hash_ring[(p + kPrefetch) % kPrefetch] = compute_hash(sel[p + kPrefetch]);
-            groups_.Prefetch(hash_ring[(p + kPrefetch) % kPrefetch]);
-        }
-
-        // build key for current row and lookup
-        RowIndex i = sel[p];
-        size_t pos = 0;
-        for (size_t k = 0; k < col_descs.size(); ++k) {
-            if (!col_descs[k].is_str) {
-                __builtin_memcpy(key_buffer_.data() + pos, &ptrs[k].ints[i], sizeof(int64_t));
-                pos += sizeof(int64_t);
-            } else {
-                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
-                uint32_t len = static_cast<uint32_t>(sv.size());
                 __builtin_memcpy(key_buffer_.data() + pos, &len, sizeof(uint32_t));
                 pos += sizeof(uint32_t);
                 __builtin_memcpy(key_buffer_.data() + pos, sv.data(), len);

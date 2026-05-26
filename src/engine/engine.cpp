@@ -50,10 +50,6 @@ void Scan::SetColumns(std::vector<size_t> columns) {
     columns_ = columns;
 }
 
-void Scan::SetScanOptions(std::vector<std::shared_ptr<ScanOptions>> options) {
-    scan_options_ = std::move(options);
-}
-
 std::optional<EngineBatch> Scan::GetNext() {
     if (current_row_group_ >= num_row_groups_) {
         return std::nullopt;
@@ -72,16 +68,11 @@ std::optional<EngineBatch> Scan::GetNext() {
     }
 
     EngineBatch result;
-    for (size_t k = 0; k < columns_.size(); ++k) {
-        size_t col = columns_[k];
+    for (size_t col : columns_) {
         const auto& meta = batch_meta_[rg * cols + col];
         reader_.Jump(meta.offset - reader_.GetPos());
         result.names.push_back(schema_.columns[col].name);
-        const ScanOptions* opts = (!scan_options_.empty() && scan_options_[k]) ? scan_options_[k].get() : nullptr;
-        result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_, opts));
-        if (GetColumnSize(result.columns.back()) == 0 && opts != nullptr) {
-            return GetNext();
-        }
+        result.columns.emplace_back(schema_.columns[col].type->GetBatch(meta.size, reader_));
     }
 
     size_t num_rows = GetColumnSize(result.columns[0]);
@@ -106,7 +97,9 @@ std::optional<EngineBatch> Filter::GetNext() {
 
 // Aggregate
 
-void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs) {
+void Aggregate::ProcessBatch(EngineBatch& batch,
+                              const std::vector<ColDesc>& col_descs,
+                              bool only_count_all) {
     std::vector<ColPtr> ptrs(col_descs.size());
     for (size_t k = 0; k < col_descs.size(); ++k) {
         const auto& col = batch.columns[col_descs[k].col_idx];
@@ -119,96 +112,60 @@ void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col
         }
     }
 
-    const auto& sel = batch.selection;
-    const size_t n = sel.size();
-    constexpr size_t kPrefetch = 16;
-    size_t hash_ring[kPrefetch];
-    char tmp_buf[256];
-
-    auto prefetch_row = [&](RowIndex i, size_t slot) {
+    for (auto i : batch.selection) {
         size_t pos = 0;
         for (size_t k = 0; k < col_descs.size(); ++k) {
             if (!col_descs[k].is_str) {
-                __builtin_memcpy(tmp_buf + pos, &ptrs[k].ints[i], sizeof(int64_t));
+                if (pos + sizeof(int64_t) > key_buffer_.size()) {
+                    key_buffer_.resize(pos + sizeof(int64_t));
+                }
+                int64_t val = ptrs[k].ints[i];
+                __builtin_memcpy(key_buffer_.data() + pos, &val, sizeof(int64_t));
                 pos += sizeof(int64_t);
             } else {
-                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
+                std::string_view sv =
+                    ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
                 uint32_t len = static_cast<uint32_t>(sv.size());
-                __builtin_memcpy(tmp_buf + pos, &len, sizeof(uint32_t));
-                pos += sizeof(uint32_t);
-                __builtin_memcpy(tmp_buf + pos, sv.data(), len);
-                pos += len;
-            }
-        }
-        hash_ring[slot] = StringViewHash{}({tmp_buf, pos});
-        groups_.Prefetch(hash_ring[slot]);
-    };
-
-    for (size_t p = 0; p < std::min(kPrefetch, n); ++p) {
-        prefetch_row(sel[p], p);
-    }
-
-    for (size_t p = 0; p < n; ++p) {
-        if (p + kPrefetch < n) {
-            prefetch_row(sel[p + kPrefetch], (p + kPrefetch) % kPrefetch);
-        }
-
-        RowIndex i = sel[p];
-        size_t pos = 0;
-        for (size_t k = 0; k < col_descs.size(); ++k) {
-            if (!col_descs[k].is_str) {
-                if (pos + sizeof(int64_t) > key_buffer_.size()) { key_buffer_.resize(pos + sizeof(int64_t)); }
-                __builtin_memcpy(key_buffer_.data() + pos, &ptrs[k].ints[i], sizeof(int64_t));
-                pos += sizeof(int64_t);
-            } else {
-                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
-                uint32_t len = static_cast<uint32_t>(sv.size());
-                if (pos + sizeof(uint32_t) + len > key_buffer_.size()) { key_buffer_.resize(pos + sizeof(uint32_t) + len); }
+                if (pos + sizeof(uint32_t) + len > key_buffer_.size()) {
+                    key_buffer_.resize(pos + sizeof(uint32_t) + len);
+                }
                 __builtin_memcpy(key_buffer_.data() + pos, &len, sizeof(uint32_t));
                 pos += sizeof(uint32_t);
                 __builtin_memcpy(key_buffer_.data() + pos, sv.data(), len);
                 pos += len;
             }
         }
-        std::string_view lookup_key(key_buffer_.data(), pos);
 
-        size_t& val = groups_.FindOrInsert(
-            lookup_key, [&](std::string_view fresh_key) -> std::string_view {
-                return key_arena_.Alloc(fresh_key);
-            });
-        if (val == 0) {
-            val = ++num_groups_;
-            size_t elems = (num_groups_ * total_state_size_ + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
-            states_.resize(elems);
-            char* state = reinterpret_cast<char*>(states_.data()) + (num_groups_ - 1) * total_state_size_;
-            for (size_t a = 0; a < aggs_.size(); ++a) {
-                aggs_[a]->InitState(state + agg_offsets_[a]);
-            }
+        std::string_view lookup_key(key_buffer_.data(), pos);
+        auto& slot = groups_.FindOrInsert(
+            lookup_key, [&](std::string_view fresh_key) { return arena_.Alloc(fresh_key); });
+
+        if (has_count_all_) {
+            slot.count++;
         }
-        char* state = reinterpret_cast<char*>(states_.data()) + (val - 1) * total_state_size_;
-        for (size_t a = 0; a < aggs_.size(); ++a) {
-            aggs_[a]->NextRaw(state + agg_offsets_[a], batch, i);
+
+        if (!only_count_all) {
+            size_t first = has_count_all_ ? 1 : 0;
+            if (slot.rest.empty()) {
+                slot.rest.reserve(factories_.size() - first);
+                for (size_t f = first; f < factories_.size(); ++f) {
+                    slot.rest.push_back(factories_[f].make());
+                }
+            }
+            for (auto& agg : slot.rest) {
+                agg->Next(batch, i);
+            }
         }
     }
 }
 
 void Aggregate::Run() {
     ready_ = true;
-
-    // строим агрегаторы и считаем размер стейта
-    agg_offsets_.resize(factories_.size());
-    total_state_size_ = 0;
-    for (size_t f = 0; f < factories_.size(); ++f) {
-        aggs_.push_back(factories_[f].make());
-        agg_offsets_[f] = total_state_size_;
-        size_t sz = aggs_[f]->StateSize();
-        // round up to alignof(max_align_t) so each slot stays aligned
-        total_state_size_ += (sz + alignof(std::max_align_t) - 1) & ~(alignof(std::max_align_t) - 1);
-    }
-    // val хранит idx+1 (0 = пустой слот)
-    // поэтому используем size_t val, при вставке пишем num_groups_ (до инкремента)+1
+    has_count_all_ = !factories_.empty() && factories_[0].is_count_all;
+    const bool only_count_all = has_count_all_ && factories_.size() == 1;
 
     is_string_column_.assign(group_columns_.size(), false);
+
     std::vector<ColDesc> col_descs;
     col_descs.reserve(group_columns_.size());
 
@@ -219,9 +176,9 @@ void Aggregate::Run() {
             col_descs.push_back({col_idx, is_str});
             is_string_column_[k] = is_str;
         }
-        ProcessBatch(*batch, col_descs);
+        ProcessBatch(*batch, col_descs, only_count_all);
         while (auto next = child_->GetNext()) {
-            ProcessBatch(*next, col_descs);
+            ProcessBatch(*next, col_descs, only_count_all);
         }
     }
 
@@ -240,6 +197,7 @@ std::optional<EngineBatch> Aggregate::GetNext() {
 
     EngineBatch result;
     result.names = group_names_;
+
     for (const auto& name : agg_names_) {
         result.names.push_back(name);
     }
@@ -251,9 +209,16 @@ std::optional<EngineBatch> Aggregate::GetNext() {
             result.columns.emplace_back(std::vector<int64_t>{});
         }
     }
-    for (size_t a = 0; a < aggs_.size(); ++a) {
-        char* sample_state = reinterpret_cast<char*>(states_.data()) + 0 * total_state_size_ + agg_offsets_[a];
-        result.columns.push_back(MakeEmptyColumnLike(aggs_[a]->GetResultRaw(sample_state)));
+
+    if (has_count_all_) {
+        result.columns.emplace_back(std::vector<int64_t>{});
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+        }
+    } else {
+        for (const auto& agg : groups_.GetSlot(cur_idx_).val.rest) {
+            result.columns.push_back(MakeEmptyColumnLike(agg->GetResult()));
+        }
     }
 
     for (auto& col : result.columns) {
@@ -269,30 +234,41 @@ std::optional<EngineBatch> Aggregate::GetNext() {
 
         auto& slot = groups_.GetSlot(cur_idx_);
         std::string_view key = slot.key;
-        size_t group_idx = slot.val - 1;
-        size_t key_offset = 0;
+        size_t offset = 0;
 
         for (size_t i = 0; i < group_columns_.size(); ++i) {
             if (is_string_column_[i]) {
                 uint32_t len;
-                std::memcpy(&len, key.data() + key_offset, sizeof(uint32_t));
-                key_offset += sizeof(uint32_t);
-                std::string_view str_val(key.data() + key_offset, len);
-                key_offset += len;
+                std::memcpy(&len, key.data() + offset, sizeof(uint32_t));
+                offset += sizeof(uint32_t);
+
+                std::string_view str_val(key.data() + offset, len);
+                offset += len;
+
                 std::get<std::vector<std::string_view>>(result.columns[i]).push_back(str_val);
             } else {
                 int64_t int_val;
-                std::memcpy(&int_val, key.data() + key_offset, sizeof(int64_t));
-                key_offset += sizeof(int64_t);
+                std::memcpy(&int_val, key.data() + offset, sizeof(int64_t));
+                offset += sizeof(int64_t);
+
                 std::get<std::vector<int64_t>>(result.columns[i]).push_back(int_val);
             }
         }
 
-        char* state = reinterpret_cast<char*>(states_.data()) + group_idx * total_state_size_;
         size_t agg_col_offset = group_columns_.size();
-        for (size_t a = 0; a < aggs_.size(); ++a) {
-            auto agg_res = aggs_[a]->GetResultRaw(state + agg_offsets_[a]);
-            AppendColumnValue(result.columns[agg_col_offset + a], GetColumnValue(agg_res, 0));
+        if (has_count_all_) {
+            std::get<std::vector<int64_t>>(result.columns[agg_col_offset])
+                .push_back(slot.val.count);
+            for (size_t i = 0; i < slot.val.rest.size(); ++i) {
+                auto agg_res = slot.val.rest[i]->GetResult();
+                AppendColumnValue(result.columns[agg_col_offset + 1 + i],
+                                  GetColumnValue(agg_res, 0));
+            }
+        } else {
+            for (size_t i = 0; i < slot.val.rest.size(); ++i) {
+                auto agg_res = slot.val.rest[i]->GetResult();
+                AppendColumnValue(result.columns[agg_col_offset + i], GetColumnValue(agg_res, 0));
+            }
         }
 
         result.selection.push_back(static_cast<RowIndex>(count++));

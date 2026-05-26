@@ -211,7 +211,6 @@ void ApiPipeline::MaterializePendingOrder() {
 QueryResult ApiPipeline::Run() {
     MaterializePendingOrder();
     scanner_->SetColumns(parser_.GetColumnsForScan());
-    scanner_->SetScanOptions(parser_.GetScanOptions());
     EngineBatch batch = engine_.Run(root_, selected_columns_);
     QueryResult result;
     if (batch.names.empty() && !selected_columns_.empty()) {

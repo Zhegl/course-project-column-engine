@@ -2,14 +2,11 @@
 #include <functional>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <vector>
 #include "engine/aggregators.h"
-#include "engine/bloom.h"
 #include "engine/expressions.h"
 #include "engine/predicates.h"
 #include "types/types.h"
-#include "types/scan_options.h"
 
 namespace column_engine::internal {
 
@@ -26,7 +23,6 @@ public:
     Schema GetRealSchema();
     size_t GetColumnId(const std::string& name);
     std::vector<size_t> GetColumnsForScan();
-    std::vector<std::shared_ptr<ScanOptions>> GetScanOptions();
     std::shared_ptr<FilterPredicate> ParseWhere(const std::string& arg);
     std::pair<std::vector<AggFactory>, std::vector<ColumnMetaData>> ParseAggregate(const std::string& arg);
     // returns {function, is_int_result}
@@ -36,7 +32,6 @@ private:
     const Schema& schema_;
     Schema cur_schema_;
     std::vector<size_t> columns_for_scan_;
-    std::unordered_map<size_t, std::shared_ptr<StringScanOptions>> str_scan_options_;
 };
 
 }  // namespace column_engine::internal

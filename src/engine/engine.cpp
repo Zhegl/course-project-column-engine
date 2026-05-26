@@ -119,38 +119,68 @@ void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col
         }
     }
 
-    for (auto i : batch.selection) {
+    const auto& sel = batch.selection;
+    const size_t n = sel.size();
+    constexpr size_t kPrefetch = 16;
+    size_t hash_ring[kPrefetch];
+
+    auto compute_hash = [&](RowIndex i) -> size_t {
         size_t pos = 0;
         for (size_t k = 0; k < col_descs.size(); ++k) {
             if (!col_descs[k].is_str) {
-                if (pos + sizeof(int64_t) > key_buffer_.size()) {
-                    key_buffer_.resize(pos + sizeof(int64_t));
-                }
-                int64_t val = ptrs[k].ints[i];
-                __builtin_memcpy(key_buffer_.data() + pos, &val, sizeof(int64_t));
+                if (pos + sizeof(int64_t) > key_buffer_.size()) { key_buffer_.resize(pos + sizeof(int64_t)); }
+                __builtin_memcpy(key_buffer_.data() + pos, &ptrs[k].ints[i], sizeof(int64_t));
                 pos += sizeof(int64_t);
             } else {
-                std::string_view sv =
-                    ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
+                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
                 uint32_t len = static_cast<uint32_t>(sv.size());
-                if (pos + sizeof(uint32_t) + len > key_buffer_.size()) {
-                    key_buffer_.resize(pos + sizeof(uint32_t) + len);
-                }
+                if (pos + sizeof(uint32_t) + len > key_buffer_.size()) { key_buffer_.resize(pos + sizeof(uint32_t) + len); }
                 __builtin_memcpy(key_buffer_.data() + pos, &len, sizeof(uint32_t));
                 pos += sizeof(uint32_t);
                 __builtin_memcpy(key_buffer_.data() + pos, sv.data(), len);
                 pos += len;
             }
         }
+        return StringViewHash{}({key_buffer_.data(), pos});
+    };
 
+    // prewarm: prefetch first kPrefetch slots
+    for (size_t p = 0; p < std::min(kPrefetch, n); ++p) {
+        hash_ring[p] = compute_hash(sel[p]);
+        groups_.Prefetch(hash_ring[p]);
+    }
+
+    for (size_t p = 0; p < n; ++p) {
+        // prefetch slot kPrefetch rows ahead
+        if (p + kPrefetch < n) {
+            hash_ring[(p + kPrefetch) % kPrefetch] = compute_hash(sel[p + kPrefetch]);
+            groups_.Prefetch(hash_ring[(p + kPrefetch) % kPrefetch]);
+        }
+
+        // build key for current row and lookup
+        RowIndex i = sel[p];
+        size_t pos = 0;
+        for (size_t k = 0; k < col_descs.size(); ++k) {
+            if (!col_descs[k].is_str) {
+                __builtin_memcpy(key_buffer_.data() + pos, &ptrs[k].ints[i], sizeof(int64_t));
+                pos += sizeof(int64_t);
+            } else {
+                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
+                uint32_t len = static_cast<uint32_t>(sv.size());
+                __builtin_memcpy(key_buffer_.data() + pos, &len, sizeof(uint32_t));
+                pos += sizeof(uint32_t);
+                __builtin_memcpy(key_buffer_.data() + pos, sv.data(), len);
+                pos += len;
+            }
+        }
         std::string_view lookup_key(key_buffer_.data(), pos);
-        // val stores idx+1 so that 0 means "newly inserted, not yet assigned"
+
         size_t& val = groups_.FindOrInsert(
             lookup_key, [&](std::string_view fresh_key) -> std::string_view {
                 return key_arena_.Alloc(fresh_key);
             });
         if (val == 0) {
-            val = ++num_groups_;  // stores idx+1
+            val = ++num_groups_;
             size_t elems = (num_groups_ * total_state_size_ + sizeof(std::max_align_t) - 1) / sizeof(std::max_align_t);
             states_.resize(elems);
             char* state = reinterpret_cast<char*>(states_.data()) + (num_groups_ - 1) * total_state_size_;
@@ -158,8 +188,7 @@ void Aggregate::ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col
                 aggs_[a]->InitState(state + agg_offsets_[a]);
             }
         }
-        size_t group_idx = val - 1;
-        char* state = reinterpret_cast<char*>(states_.data()) + group_idx * total_state_size_;
+        char* state = reinterpret_cast<char*>(states_.data()) + (val - 1) * total_state_size_;
         for (size_t a = 0; a < aggs_.size(); ++a) {
             aggs_[a]->NextRaw(state + agg_offsets_[a], batch, i);
         }

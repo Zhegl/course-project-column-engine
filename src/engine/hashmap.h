@@ -68,10 +68,10 @@ private:
 
 template <typename T, typename Y>
 struct Slot {
+    bool occupied{false};
     T key;
     Y val;
     size_t hash{0};
-    bool occupied{false};
 };
 
 template <typename T>
@@ -87,6 +87,39 @@ template <typename T, typename Y, typename Hash>
 class HashMap {
 public:
     HashMap() : map_(8) {
+    }
+
+    void Prefetch(size_t raw_hash) const {
+        __builtin_prefetch(&map_[raw_hash & (map_.size() - 1)], 0, 1);
+    }
+
+    template <typename LookupKey, typename CreatorF>
+    Y& FindOrInsertWithHash(const LookupKey& lookup_key, size_t raw_hash, CreatorF&& creator) {
+        size_t hash = raw_hash & (map_.size() - 1);
+
+        while (true) {
+            if (!map_[hash].occupied) {
+                T permanent_key = creator(lookup_key);
+                map_[hash].key = permanent_key;
+                map_[hash].hash = raw_hash;
+                map_[hash].occupied = true;
+                size_++;
+
+                if (size_ * 2 > map_.size()) {
+                    Rebuild();
+                    return operator[](permanent_key);
+                }
+                return map_[hash].val;
+            }
+
+            if (map_[hash].key == lookup_key) {
+                return map_[hash].val;
+            }
+            ++hash;
+            if (hash == map_.size()) {
+                hash = 0;
+            }
+        }
     }
 
     template <typename LookupKey, typename CreatorF>

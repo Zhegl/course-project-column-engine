@@ -1,4 +1,5 @@
 #include "parser.h"
+#include "engine/bloom.h"
 #include <cstddef>
 #include <stdexcept>
 #include <string>
@@ -55,6 +56,19 @@ std::vector<size_t> QueryParser::GetColumnsForScan() {
         return {0};
     }
     return columns_for_scan_;
+}
+
+std::vector<std::shared_ptr<ScanOptions>> QueryParser::GetScanOptions() {
+    std::vector<std::shared_ptr<ScanOptions>> result(columns_for_scan_.size());
+    for (auto& [real_col_idx, opts] : str_scan_options_) {
+        for (size_t k = 0; k < columns_for_scan_.size(); ++k) {
+            if (columns_for_scan_[k] == real_col_idx) {
+                result[k] = opts;
+                break;
+            }
+        }
+    }
+    return result;
 }
 
 std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg) {
@@ -131,10 +145,15 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
         }
     } else if (type_name == "string") {
         std::string str_val = UnquoteStringLiteral(val);
+        size_t real_id = columns_for_scan_[id];
+        auto& opts = str_scan_options_[real_id];
+        if (!opts) { opts = std::make_shared<StringScanOptions>(); }
+
         if (op == "=") {
             return std::make_shared<StrConstEQ>(id, std::move(str_val));
         }
         if (op == "<>") {
+            if (str_val.empty()) { opts->skip_empty = true; }
             return std::make_shared<StrConstNE>(id, std::move(str_val));
         }
         if (op == "<") {
@@ -150,6 +169,12 @@ std::shared_ptr<FilterPredicate> QueryParser::ParseWhere(const std::string& arg)
             return std::make_shared<StrConstGE>(id, std::move(str_val));
         }
         if (op == "LIKE") {
+            if (!opts->bloom) { opts->bloom = std::make_shared<BloomFilter>(256); }
+            std::string stripped;
+            for (char c : str_val) {
+                if (c != '%') { stripped.push_back(c); }
+            }
+            if (!stripped.empty()) { opts->bloom->Add(stripped); }
             return std::make_shared<StrLike>(id, std::move(str_val));
         }
         if (op == "NOT LIKE") {

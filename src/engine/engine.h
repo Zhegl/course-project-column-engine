@@ -1,5 +1,6 @@
 #pragma once
 #include <types/types.h>
+#include <types/scan_options.h>
 #include <memory>
 #include <optional>
 #include <string>
@@ -26,12 +27,14 @@ public:
     Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta);
     std::optional<EngineBatch> GetNext() override;
     void SetColumns(std::vector<size_t> columns);
+    void SetScanOptions(std::vector<std::shared_ptr<ScanOptions>> options);
 
 private:
     FileReader reader_;
     Schema schema_;
     std::vector<BatchMetaData> batch_meta_;
     std::vector<size_t> columns_;
+    std::vector<std::shared_ptr<ScanOptions>> scan_options_;
     size_t current_row_group_ = 0;
     size_t num_row_groups_ = 0;
 };

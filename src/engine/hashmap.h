@@ -95,6 +95,11 @@ public:
     }
 
     template <typename LookupKey, typename CreatorF>
+    Y& FindOrInsert(const LookupKey& lookup_key, CreatorF&& creator) {
+        return FindOrInsert(lookup_key, Hash{}(lookup_key), std::forward<CreatorF>(creator));
+    }
+
+    template <typename LookupKey, typename CreatorF>
     Y& FindOrInsert(const LookupKey& lookup_key, size_t raw_hash, CreatorF&& creator) {
         size_t hash = raw_hash & (map_.size() - 1);
 

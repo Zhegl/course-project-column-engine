@@ -88,9 +88,19 @@ public:
     HashMap() : map_(8), is_used_(8) {
     }
 
+    void Prefetch(size_t raw_hash) const {
+        size_t hash = raw_hash & (map_.size() - 1);
+        __builtin_prefetch(&is_used_[hash], 0, 1);
+        __builtin_prefetch(&map_[hash], 0, 1);
+    }
+
     template <typename LookupKey, typename CreatorF>
     Y& FindOrInsert(const LookupKey& lookup_key, CreatorF&& creator) {
-        size_t raw_hash = Hash{}(lookup_key);
+        return FindOrInsert(lookup_key, Hash{}(lookup_key), std::forward<CreatorF>(creator));
+    }
+
+    template <typename LookupKey, typename CreatorF>
+    Y& FindOrInsert(const LookupKey& lookup_key, size_t raw_hash, CreatorF&& creator) {
         size_t hash = raw_hash & (map_.size() - 1);
 
         while (true) {

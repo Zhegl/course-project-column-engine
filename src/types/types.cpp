@@ -1,6 +1,9 @@
 #include "types.h"
+#include "engine/bloom.h"
+#include "scan_options.h"
 #include <sys/types.h>
 #include <cstdint>
+#include <cstring>
 #include <map>
 #include <memory>
 #include <stdexcept>
@@ -43,16 +46,22 @@ size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& wr
     std::vector<std::string> reverse_dict;
 
     uint32_t words_size = 0;
+    internal::BloomFilter bloom(256);
 
     for (auto& val : data) {
         if (dict.find(std::get<std::string>(val)) == dict.end()) {
             dict[std::get<std::string>(val)] = dict.size();
             reverse_dict.emplace_back(std::get<std::string>(val));
             words_size += std::get<std::string>(val).size();
+            bloom.Add(std::get<std::string>(val));
         }
     }
 
     size_t result = 0;
+    for (uint64_t word : bloom.Bits()) {
+        writer.Write(word);
+        result += sizeof(word);
+    }
 
     uint16_t n_words = static_cast<uint16_t>(data.size());
     uint16_t n_uwords = static_cast<uint16_t>(dict.size());
@@ -94,7 +103,35 @@ size_t ColumnTypeString::WriteType(std::vector<ColumnValue> data, FileWriter& wr
     return result;
 }
 
-ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader) {
+ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader, const ScanOptions* options) {
+    constexpr size_t kBloomWords = 256;
+    constexpr size_t kBloomBytes = kBloomWords * sizeof(uint64_t);
+
+    if (options) {
+        const auto* str_opts = static_cast<const StringScanOptions*>(options);
+        const char* bloom_ptr = reader.Peek(kBloomBytes);
+        uint64_t bloom_raw[kBloomWords];
+        std::memcpy(bloom_raw, bloom_ptr, kBloomBytes);
+
+        bool skip = false;
+        if (str_opts->skip_empty) {
+            bool all_zero = true;
+            for (size_t i = 0; i < kBloomWords; ++i) {
+                if (bloom_raw[i]) { all_zero = false; break; }
+            }
+            skip = all_zero;
+        }
+        if (!skip && str_opts->bloom) {
+            skip = !str_opts->bloom->CheckIn(bloom_raw, kBloomWords);
+        }
+        if (skip) {
+            reader.Jump(size - kBloomBytes);
+            return std::vector<std::string_view>{};
+        }
+    } else {
+        reader.Jump(kBloomBytes);
+    }
+
     uint16_t n_words = reader.Read<uint16_t>();
     uint16_t n_uwords = reader.Read<uint16_t>();
     uint32_t final_offset = reader.Read<uint32_t>();
@@ -212,7 +249,7 @@ size_t ColumnTypeInt64::WriteType(std::vector<ColumnValue> data, FileWriter& wri
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader) {
+ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader, const ScanOptions*) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;

@@ -8,7 +8,6 @@ LOGS="$4"
 
 EXIT_CODE=0
 
-LD_PRELOAD="$(ldconfig -p | awk '/libjemalloc\.so\.2/{print $NF; exit}')" \
 ./build/bin/run_query \
     "${QUERY_NUM}" \
     "${COLUMNAR}" \

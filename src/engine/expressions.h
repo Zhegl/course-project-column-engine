@@ -10,7 +10,7 @@ namespace column_engine::internal {
 class AddColFun {
 public:
     virtual ColumnValue Get(EngineBatch& batch, RowIndex i) = 0;
-    virtual std::string GetName() = 0;
+    virtual std::string GetName() const = 0;
     virtual ~AddColFun() = default;
 };
 
@@ -21,7 +21,7 @@ public:
     ColumnValue Get(EngineBatch&, RowIndex) override {
         return val_;
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return std::to_string(val_);
     }
 
@@ -36,7 +36,7 @@ public:
     ColumnValue Get(EngineBatch&, RowIndex) override {
         return val_;
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return "'" + val_ + "'";
     }
 
@@ -52,7 +52,7 @@ public:
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
         return std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return col_name_;
     }
 
@@ -73,7 +73,7 @@ public:
         }
         return std::get<std::vector<std::string>>(col)[i];
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return col_name_;
     }
 
@@ -90,7 +90,7 @@ public:
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
         return std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i] + delta_;
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         if (delta_ >= 0) {
             return col_name_ + " + " + std::to_string(delta_);
         }
@@ -112,7 +112,7 @@ public:
         return static_cast<int64_t>(
             GetStrAt(batch.columns[col_idx_], i).size());
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return "length(" + col_name_ + ")";
     }
 
@@ -135,7 +135,7 @@ public:
         auto sv = GetStrAt(batch.columns[col_idx_], i);
         return std::regex_replace(std::string(sv), re_, replacement_);
     }
-    std::string GetName() override {
+    std::string GetName() const override {
         return "regexp_replace(" + col_name_ + ", '" + pattern_ + "', '" + replacement_ + "')";
     }
 
@@ -153,7 +153,7 @@ public:
         : col_idx_(col_idx), col_name_(std::move(col_name)), fmt_(std::move(fmt)) {
     }
     ColumnValue Get(EngineBatch& batch, RowIndex i) override;
-    std::string GetName() override {
+    std::string GetName() const override {
         return "strftime('" + fmt_ + "', " + col_name_ + ")";
     }
 

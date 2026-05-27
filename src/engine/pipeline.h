@@ -16,29 +16,29 @@ class Operator;
 
 class Engine;
 
-class Scan;
+class ScanOp;
 
-class ApiPipeline {
+class Pipeline {
 public:
-    explicit ApiPipeline(Engine& engine, const Schema& schema);
-    ApiPipeline Count(std::string arg);
-    ApiPipeline Where(std::string arg);
-    ApiPipeline Aggregate(std::string arg);
-    ApiPipeline Limit(size_t arg);
-    ApiPipeline Offset(size_t arg);
-    ApiPipeline OrderBy(std::string arg);
-    ApiPipeline Rename(std::string from, std::string to);
-    ApiPipeline Add(std::string arg);
-    ApiPipeline Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr);
+    explicit Pipeline(Engine& engine, const Schema& schema);
+    Pipeline Count(std::string arg);
+    Pipeline Where(std::string arg);
+    Pipeline Aggregate(std::string arg);
+    Pipeline Limit(size_t arg);
+    Pipeline Offset(size_t arg);
+    Pipeline OrderBy(std::string arg);
+    Pipeline Rename(std::string from, std::string to);
+    Pipeline Add(std::string arg);
+    Pipeline Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr);
     template <typename... Args>
-    ApiPipeline GroupByAggregate(Args... args) {
+    Pipeline GroupByAggregate(Args... args) {
         std::vector<std::string> all_args{std::string(args)...};
         std::string aggregates = all_args.back();
         all_args.pop_back();
         return GroupByAggregateImpl(std::move(all_args), std::move(aggregates));
     }
     template <typename... Args>
-    ApiPipeline Select(Args... args) {
+    Pipeline Select(Args... args) {
         for (const auto& name : {std::string(args)...}) {
             if (name == "*") {
                 selected_columns_.clear();
@@ -52,13 +52,13 @@ public:
         }
         return *this;
     }
-    ApiPipeline SelectVec(const std::vector<std::string>& columns) {
+    Pipeline SelectVec(const std::vector<std::string>& columns) {
         for (const auto& name : columns) {
             Select(name);
         }
         return *this;
     }
-    ApiPipeline GroupByAggregateVec(std::vector<std::string> all_args) {
+    Pipeline GroupByAggregateVec(std::vector<std::string> all_args) {
         std::string aggregates = all_args.back();
         all_args.pop_back();
         return GroupByAggregateImpl(std::move(all_args), std::move(aggregates));
@@ -66,16 +66,17 @@ public:
     QueryResult Run();
 
 private:
-    ApiPipeline GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates);
+    Pipeline GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates);
     void MaterializePendingOrder();
     Engine& engine_;
     QueryParser parser_;
     std::vector<size_t> selected_columns_;
     std::shared_ptr<Operator> root_;
-    std::shared_ptr<Scan> scanner_;
+    std::shared_ptr<ScanOp> scanner_;
     std::optional<std::string> pending_order_col_;
     std::optional<std::string> pending_order_col2_;
     bool pending_order_reversed_ = false;
     size_t pending_offset_ = 0;
 };
+
 }  // namespace column_engine::internal

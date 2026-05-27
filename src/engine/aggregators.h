@@ -2,26 +2,24 @@
 #include <limits>
 #include <optional>
 #include <string>
-#include <unordered_set>
 #include <variant>
 #include "engine/batch.h"
-#include "engine/predicates.h"
 #include "types/types.h"
-#include "hashmap.h"
+#include "engine/hashmap.h"
 
 namespace column_engine::internal {
 
 class Aggregator {
 public:
     virtual void Next(EngineBatch& batch, RowIndex i) = 0;
-    virtual ColumnData GetResult() = 0;
+    virtual ColumnData GetResult() const = 0;
     virtual ~Aggregator() = default;
 };
 
 class CountAll : public Aggregator {
 public:
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t count_{0};
@@ -31,7 +29,7 @@ class IntCountDistinct : public Aggregator {
 public:
     explicit IntCountDistinct(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -42,7 +40,7 @@ class StrCountDistinct : public Aggregator {
 public:
     explicit StrCountDistinct(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -53,7 +51,7 @@ class IntSum : public Aggregator {
 public:
     explicit IntSum(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -64,7 +62,7 @@ class IntMin : public Aggregator {
 public:
     explicit IntMin(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -75,7 +73,7 @@ class IntMax : public Aggregator {
 public:
     explicit IntMax(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -86,7 +84,7 @@ class IntAvg : public Aggregator {
 public:
     explicit IntAvg(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -98,7 +96,7 @@ class StrMin : public Aggregator {
 public:
     explicit StrMin(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;
@@ -109,7 +107,7 @@ class StrMax : public Aggregator {
 public:
     explicit StrMax(size_t col_idx) : col_idx_(col_idx) {}
     void Next(EngineBatch& batch, RowIndex i) override;
-    ColumnData GetResult() override;
+    ColumnData GetResult() const override;
 
 private:
     size_t col_idx_;

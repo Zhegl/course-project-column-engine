@@ -1,4 +1,5 @@
 #include "engine/aggregators.h"
+#include "engine/predicates.h"
 
 namespace column_engine::internal {
 
@@ -6,7 +7,7 @@ void CountAll::Next(EngineBatch& batch, RowIndex i) {
     ++count_;
 }
 
-ColumnData CountAll::GetResult() {
+ColumnData CountAll::GetResult() const {
     return std::vector<int64_t>{static_cast<int64_t>(count_)};
 }
 
@@ -14,7 +15,7 @@ void IntCountDistinct::Next(EngineBatch& batch, RowIndex i) {
     values_[std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i]];
 }
 
-ColumnData IntCountDistinct::GetResult() {
+ColumnData IntCountDistinct::GetResult() const {
     return std::vector<int64_t>{static_cast<int64_t>(values_.Size())};
 }
 
@@ -22,14 +23,14 @@ void StrCountDistinct::Next(EngineBatch& batch, RowIndex i) {
     values_[std::string(GetStrAt(batch.columns[col_idx_], i))];
 }
 
-ColumnData StrCountDistinct::GetResult() {
+ColumnData StrCountDistinct::GetResult() const {
     return std::vector<int64_t>{static_cast<int64_t>(values_.Size())};
 }
 
 void IntSum::Next(EngineBatch& batch, RowIndex i) {
     sum_ += std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
 }
-ColumnData IntSum::GetResult() {
+ColumnData IntSum::GetResult() const {
     return std::vector<int64_t>{sum_};
 }
 
@@ -39,7 +40,7 @@ void IntMin::Next(EngineBatch& batch, RowIndex i) {
         min_ = v;
     }
 }
-ColumnData IntMin::GetResult() {
+ColumnData IntMin::GetResult() const {
     return std::vector<int64_t>{min_};
 }
 
@@ -49,7 +50,7 @@ void IntMax::Next(EngineBatch& batch, RowIndex i) {
         max_ = v;
     }
 }
-ColumnData IntMax::GetResult() {
+ColumnData IntMax::GetResult() const {
     return std::vector<int64_t>{max_};
 }
 
@@ -57,7 +58,7 @@ void IntAvg::Next(EngineBatch& batch, RowIndex i) {
     sum_ += std::get<std::vector<int64_t>>(batch.columns[col_idx_])[i];
     ++count_;
 }
-ColumnData IntAvg::GetResult() {
+ColumnData IntAvg::GetResult() const {
     return std::vector<int64_t>{static_cast<int64_t>(count_ > 0 ? sum_ / count_ : 0)};
 }
 
@@ -67,7 +68,7 @@ void StrMin::Next(EngineBatch& batch, RowIndex i) {
         min_ = v;
     }
 }
-ColumnData StrMin::GetResult() {
+ColumnData StrMin::GetResult() const {
     return std::vector<std::string>{min_.value_or("")};
 }
 
@@ -77,7 +78,7 @@ void StrMax::Next(EngineBatch& batch, RowIndex i) {
         max_ = v;
     }
 }
-ColumnData StrMax::GetResult() {
+ColumnData StrMax::GetResult() const {
     return std::vector<std::string>{max_.value_or("")};
 }
 

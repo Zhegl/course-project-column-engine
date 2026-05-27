@@ -5,6 +5,7 @@ add_library(convert_lib
 target_include_directories(convert_lib
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
+        ${PROJECT_SOURCE_DIR}/src
 )
 
 target_link_libraries(convert_lib

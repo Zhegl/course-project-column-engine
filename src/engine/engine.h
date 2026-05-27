@@ -57,10 +57,8 @@ enum class GroupKeyType { Int, Str, Multi };
 
 class AggregateOp : public Operator {
 public:
-    struct AggSlot {
-        int64_t count{0};
-        std::vector<std::unique_ptr<Aggregator>> rest;
-    };
+    static constexpr size_t kPrefetchThreshold = 1024;
+    static constexpr size_t kPrefetchDist = 16;
 
     AggregateOp(std::shared_ptr<Operator> child, std::vector<size_t> group_columns,
                 std::vector<std::string> group_names, std::vector<AggFactory> factories,
@@ -73,6 +71,15 @@ public:
           key_type_(key_type) {
     }
 
+    std::optional<EngineBatch> GetNext() override;
+
+private:
+    struct AggSlot {
+        int64_t count{0};
+        std::vector<std::unique_ptr<Aggregator>> rest;
+    };
+
+
     struct ColDesc {
         size_t col_idx;
         bool is_str;
@@ -84,11 +91,11 @@ public:
         const std::string* strs;
     };
 
-    std::optional<EngineBatch> GetNext() override;
 
-private:
     void Run();
     void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs, bool only_count_all);
+    void UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all);
+    void BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs, const std::vector<ColPtr>& ptrs, std::vector<char>& buf);
 
     bool ready_{false};
     size_t cur_idx_{0};
@@ -102,10 +109,6 @@ private:
 
     HashMap<std::string_view, AggSlot, StringViewHash> groups_;
     Arena arena_;
-    std::vector<char> key_buffer_;
-    std::vector<char> prefetch_key_buf_;
-    std::vector<size_t> prefetch_hashes_;
-    std::vector<std::pair<size_t, size_t>> prefetch_key_spans_;
     std::vector<bool> is_string_column_;
 };
 

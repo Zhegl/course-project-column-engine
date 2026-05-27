@@ -3,29 +3,12 @@
 
 namespace column_engine::internal {
 
-IntConstNE::IntConstNE(size_t id_a, int64_t const_b) : id_a_(id_a), const_b_(const_b) {
-}
 
-bool IntConstNE::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<int64_t>>(batch.columns[id_a_])[i] != const_b_;
-}
-
-IntConstEQ::IntConstEQ(size_t id_a, int64_t const_b) : id_a_(id_a), const_b_(const_b) {
-}
-
-bool IntConstEQ::Check(EngineBatch& batch, RowIndex i) {
-    return std::get<std::vector<int64_t>>(batch.columns[id_a_])[i] == const_b_;
-}
-
-StrConstNE::StrConstNE(size_t id_a, std::string const_b)
-    : id_a_(id_a), const_b_(std::move(const_b)) {
-}
-
-bool StrConstNE::Check(EngineBatch& batch, RowIndex i) {
+bool StrConstNE::Check(const EngineBatch& batch, RowIndex i) {
     return GetStrAt(batch.columns[id_a_], i) != const_b_;
 }
 
-std::vector<RowIndex> StrConstNE::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+std::vector<RowIndex> StrConstNE::CheckBatch(const EngineBatch& batch, const std::vector<RowIndex>& selection) {
     std::vector<RowIndex> result;
     result.reserve(selection.size());
     const auto& col = batch.columns[id_a_];
@@ -47,15 +30,11 @@ std::vector<RowIndex> StrConstNE::CheckBatch(EngineBatch& batch, const std::vect
     return result;
 }
 
-StrConstEQ::StrConstEQ(size_t id_a, std::string const_b)
-    : id_a_(id_a), const_b_(std::move(const_b)) {
-}
-
-bool StrConstEQ::Check(EngineBatch& batch, RowIndex i) {
+bool StrConstEQ::Check(const EngineBatch& batch, RowIndex i) {
     return GetStrAt(batch.columns[id_a_], i) == const_b_;
 }
 
-std::vector<RowIndex> StrConstEQ::CheckBatch(EngineBatch& batch, const std::vector<RowIndex>& selection) {
+std::vector<RowIndex> StrConstEQ::CheckBatch(const EngineBatch& batch, const std::vector<RowIndex>& selection) {
     std::vector<RowIndex> result;
     result.reserve(selection.size());
     const auto& col = batch.columns[id_a_];
@@ -121,14 +100,14 @@ static bool LikeMatch(const std::string_view str, const std::string& pattern) {
 StrLike::StrLike(size_t id_a, std::string pattern) : id_a_(id_a), infix_(std::move(pattern)) {
 }
 
-bool StrLike::Check(EngineBatch& batch, RowIndex i) {
+bool StrLike::Check(const EngineBatch& batch, RowIndex i) {
     return LikeMatch(GetStrAt(batch.columns[id_a_], i), infix_);
 }
 
 StrNotLike::StrNotLike(size_t id_a, std::string pattern) : inner_(id_a, std::move(pattern)) {
 }
 
-bool StrNotLike::Check(EngineBatch& batch, RowIndex i) {
+bool StrNotLike::Check(const EngineBatch& batch, RowIndex i) {
     return !inner_.Check(batch, i);
 }
 

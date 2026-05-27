@@ -6,7 +6,7 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include "clickbench_queries.h"
+#include "app/clickbench_queries.h"
 
 using column_engine::Engine;
 using column_engine::QueryResult;

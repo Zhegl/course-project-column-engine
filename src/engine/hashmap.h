@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <functional>
+#include <string_view>
+#include <string>
 #include <vector>
-#include "types/types.h"
 
 namespace column_engine::internal {
 
@@ -15,7 +17,7 @@ public:
     Arena(const Arena&) = delete;
     Arena& operator=(const Arena&) = delete;
 
-    Arena(Arena&& other) noexcept 
+    Arena(Arena&& other) noexcept
         : blocks_(std::move(other.blocks_)),
           current_ptr_(other.current_ptr_),
           current_end_(other.current_end_),
@@ -51,10 +53,10 @@ public:
 private:
     void AllocateNewBlock(size_t min_size) {
         size_t block_size = std::max(next_block_size_, min_size);
-        
+
         char* new_block = new char[block_size];
         blocks_.push_back(new_block);
-        
+
         current_ptr_ = new_block;
         current_end_ = current_ptr_ + block_size;
         next_block_size_ = std::min(static_cast<size_t>(67108864), block_size * 2);
@@ -72,15 +74,6 @@ struct Slot {
     Y val;
     size_t hash{0};
 };
-
-template <typename T>
-bool IsEmptyKey(const T&) { 
-    return false;
-}
-
-inline bool IsEmptyKey(std::string_view v) { 
-    return v.empty();
-}
 
 template <typename T, typename Y, typename Hash>
 class HashMap {
@@ -111,16 +104,14 @@ public:
                 is_used_[hash] = true;
                 size_++;
 
-                if (size_ * 2 > map_.size()) {
+                if (size_ * 10 > map_.size() * 5) {
                     Rebuild();
                     return operator[](permanent_key);
                 }
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] &&
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(lookup_key) ? true : map_[hash].key == lookup_key))
-            {
+            if (map_[hash].key == lookup_key) {
                 return map_[hash].val;
             }
             ++hash;
@@ -147,9 +138,7 @@ public:
                 return map_[hash].val;
             }
 
-            if (is_used_[hash] &&
-                (IsEmptyKey(map_[hash].key) && IsEmptyKey(key) ? true : map_[hash].key == key))
-            {
+            if (map_[hash].key == key) {
                 return map_[hash].val;
             }
 
@@ -167,34 +156,6 @@ public:
     bool Empty() const {
         return size_ == 0;
     }
-
-    struct Iterator {
-        const std::vector<char>* is_used;
-        std::vector<Slot<T, Y>>* map;
-        size_t idx;
-
-        Slot<T, Y>& operator*() {
-            return (*map)[idx];
-        }
-        Slot<T, Y>* operator->() {
-            return &(*map)[idx];
-        }
-
-        Iterator& operator++() {
-            ++idx;
-            while (idx < map->size() && !(*is_used)[idx]) {
-                ++idx;
-            }
-            return *this;
-        }
-
-        bool operator==(const Iterator& o) const {
-            return idx == o.idx;
-        }
-        bool operator!=(const Iterator& o) const {
-            return idx != o.idx;
-        }
-    };
 
     size_t Capacity() const {
         return map_.size();
@@ -220,18 +181,6 @@ public:
             ++idx;
         }
         return idx;
-    }
-
-    Iterator Begin() {
-        size_t idx = 0;
-        while (idx < map_.size() && !is_used_[idx]) {
-            ++idx;
-        }
-        return {&is_used_, &map_, idx};
-    }
-
-    Iterator End() {
-        return {&is_used_, &map_, map_.size()};
     }
 
 private:
@@ -274,14 +223,6 @@ struct StrHash {
     }
 };
 
-
-struct ColumnValueHash {
-    size_t operator()(const ColumnValue& value) const {
-        return std::visit([](const auto& v) { return std::hash<std::decay_t<decltype(v)>>{}(v); },
-                          value);
-    }
-};
-
 struct StringViewHash {
     size_t operator()(std::string_view v) const {
         static constexpr uint64_t kMul = 0x9e3779b97f4a7c15ULL;
@@ -306,7 +247,4 @@ struct StringViewHash {
     }
 };
 
-
-
 }  // namespace column_engine::internal
-// NOLINTEND(readability-identifier-naming)

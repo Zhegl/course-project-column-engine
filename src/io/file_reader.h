@@ -15,13 +15,13 @@ public:
 
     bool Read(char* data, size_t size);
 
-    bool Eof();
+    bool Eof() const;
 
     void Jump(int64_t offset);
 
-    size_t Size();
+    size_t Size() const;
 
-    size_t GetPos();
+    size_t GetPos() const;
 
     template <typename T>
     T Read() {

@@ -1,4 +1,4 @@
-#include "file_reader.h"
+#include "io/file_reader.h"
 #include <cstring>
 #include <stdexcept>
 #include <sys/mman.h>
@@ -47,7 +47,7 @@ bool FileReader::Read(char* data, size_t size) {
     return true;
 }
 
-bool FileReader::Eof() {
+bool FileReader::Eof() const {
     return pos_ >= size_;
 }
 
@@ -55,11 +55,11 @@ void FileReader::Jump(int64_t offset) {
     pos_ = static_cast<size_t>(static_cast<int64_t>(pos_) + offset);
 }
 
-size_t FileReader::GetPos() {
+size_t FileReader::GetPos() const {
     return pos_;
 }
 
-size_t FileReader::Size() {
+size_t FileReader::Size() const {
     return size_;
 }
 

@@ -1,22 +1,22 @@
-#include "api.h"
-#include "column_utils.h"
+#include "engine/pipeline.h"
+#include "engine/column_utils.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include "engine.h"
+#include "engine/engine.h"
 #include "types/types.h"
 
 namespace column_engine::internal {
 
-ApiPipeline::ApiPipeline(Engine& engine, const Schema& schema)
+Pipeline::Pipeline(Engine& engine, const Schema& schema)
     : engine_(engine), parser_(schema) {
     scanner_ = engine.MakeScan();
     root_ = scanner_;
 }
 
-ApiPipeline ApiPipeline::Count(std::string arg) {
+Pipeline Pipeline::Count(std::string arg) {
     if (arg == "*") {
-        root_ = std::make_shared<class Aggregate>(
+        root_ = std::make_shared<AggregateOp>(
             root_,
             std::vector<size_t>{},
             std::vector<std::string>{},
@@ -28,16 +28,16 @@ ApiPipeline ApiPipeline::Count(std::string arg) {
     throw std::runtime_error("Wrong arg for .Count: " + arg);
 }
 
-ApiPipeline ApiPipeline::Where(std::string arg) {
-    root_ = std::make_shared<Filter>(root_, parser_.ParseWhere(arg));
+Pipeline Pipeline::Where(std::string arg) {
+    root_ = std::make_shared<FilterOp>(root_, parser_.ParseWhere(arg));
     return *this;
 }
 
-ApiPipeline ApiPipeline::Aggregate(std::string arg) {
+Pipeline Pipeline::Aggregate(std::string arg) {
     return GroupByAggregateImpl({}, std::move(arg));
 }
 
-ApiPipeline ApiPipeline::OrderBy(std::string arg) {
+Pipeline Pipeline::OrderBy(std::string arg) {
     if (arg.size() < 4) {
         throw std::runtime_error("wrong args for OrderBy");
     }
@@ -72,7 +72,7 @@ ApiPipeline ApiPipeline::OrderBy(std::string arg) {
     return *this;
 }
 
-ApiPipeline ApiPipeline::Offset(size_t arg) {
+Pipeline Pipeline::Offset(size_t arg) {
     if (pending_order_col_) {
         pending_offset_ = arg;
     } else {
@@ -81,15 +81,15 @@ ApiPipeline ApiPipeline::Offset(size_t arg) {
     return *this;
 }
 
-ApiPipeline ApiPipeline::Limit(size_t arg) {
+Pipeline Pipeline::Limit(size_t arg) {
     if (pending_order_col_) {
         size_t col_idx = parser_.GetColumnId(*pending_order_col_);
         if (pending_order_col2_) {
             size_t col_idx2 = parser_.GetColumnId(*pending_order_col2_);
-            root_ = std::make_shared<TopK>(root_, col_idx, col_idx2, pending_order_reversed_, arg + pending_offset_);
+            root_ = std::make_shared<TopKOp>(root_, col_idx, col_idx2, pending_order_reversed_, arg + pending_offset_);
             pending_order_col2_.reset();
         } else {
-            root_ = std::make_shared<TopK>(root_, col_idx, pending_order_reversed_, arg + pending_offset_);
+            root_ = std::make_shared<TopKOp>(root_, col_idx, pending_order_reversed_, arg + pending_offset_);
         }
         if (pending_offset_ > 0) {
             root_ = std::make_shared<OffsetOp>(root_, pending_offset_);
@@ -102,16 +102,16 @@ ApiPipeline ApiPipeline::Limit(size_t arg) {
     return *this;
 }
 
-ApiPipeline ApiPipeline::Rename(std::string from, std::string to) {
+Pipeline Pipeline::Rename(std::string from, std::string to) {
     size_t id = parser_.GetColumnId(from);
     Schema new_schema = parser_.GetSchema();
     new_schema.columns[id].name = to;
     parser_.SetSchema(new_schema);
-    root_ = std::make_shared<As>(root_, from, to);
+    root_ = std::make_shared<AsOp>(root_, from, to);
     return *this;
 }
 
-ApiPipeline ApiPipeline::Add(std::string arg) {
+Pipeline Pipeline::Add(std::string arg) {
     auto [func, is_int] = parser_.ParseAdd(arg);
 
     Schema new_schema = parser_.GetSchema();
@@ -122,17 +122,17 @@ ApiPipeline ApiPipeline::Add(std::string arg) {
     if (is_int) {
         meta.type = std::make_shared<ColumnTypeInt64>();
         new_schema.columns.push_back(std::move(meta));
-        root_ = std::make_shared<AddCol<int64_t>>(root_, func, insert_idx);
+        root_ = std::make_shared<AddColOp<int64_t>>(root_, func, insert_idx);
     } else {
         meta.type = std::make_shared<ColumnTypeString>();
         new_schema.columns.push_back(std::move(meta));
-        root_ = std::make_shared<AddCol<std::string>>(root_, func, insert_idx);
+        root_ = std::make_shared<AddColOp<std::string>>(root_, func, insert_idx);
     }
     parser_.SetSchema(new_schema);
     return *this;
 }
 
-ApiPipeline ApiPipeline::Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr) {
+Pipeline Pipeline::Case(std::string name, std::string when_cond, std::string then_expr, std::string else_expr) {
     auto pred = parser_.ParseWhere(when_cond);
     auto [then_fun, then_is_int] = parser_.ParseAdd(then_expr);
     auto [else_fun, else_is_int] = parser_.ParseAdd(else_expr);
@@ -145,17 +145,17 @@ ApiPipeline ApiPipeline::Case(std::string name, std::string when_cond, std::stri
     if (is_int) {
         meta.type = std::make_shared<ColumnTypeInt64>();
         new_schema.columns.push_back(std::move(meta));
-        root_ = std::make_shared<AddCase<int64_t>>(root_, then_fun, else_fun, insert_idx, pred, name);
+        root_ = std::make_shared<AddCaseOp<int64_t>>(root_, then_fun, else_fun, insert_idx, pred, name);
     } else {
         meta.type = std::make_shared<ColumnTypeString>();
         new_schema.columns.push_back(std::move(meta));
-        root_ = std::make_shared<AddCase<std::string>>(root_, then_fun, else_fun, insert_idx, pred, name);
+        root_ = std::make_shared<AddCaseOp<std::string>>(root_, then_fun, else_fun, insert_idx, pred, name);
     }
     parser_.SetSchema(new_schema);
     return *this;
 }
 
-ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates) {
+Pipeline Pipeline::GroupByAggregateImpl(std::vector<std::string> group_columns, std::string aggregates) {
     std::vector<size_t> group_column_ids;
     group_column_ids.reserve(group_columns.size());
     for (const auto& name : group_columns) {
@@ -186,7 +186,7 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
         key_type = (type_name == "int64") ? GroupKeyType::Int : GroupKeyType::Str;
     }
 
-    root_ = std::make_shared<class Aggregate>(
+    root_ = std::make_shared<AggregateOp>(
         root_,
         std::move(group_column_ids),
         std::move(group_columns),
@@ -194,21 +194,18 @@ ApiPipeline ApiPipeline::GroupByAggregateImpl(std::vector<std::string> group_col
         std::move(agg_names),
         key_type);
 
-
-
-
     return *this;
 }
 
-void ApiPipeline::MaterializePendingOrder() {
+void Pipeline::MaterializePendingOrder() {
     if (pending_order_col_) {
         size_t col_idx = parser_.GetColumnId(*pending_order_col_);
-        root_ = std::make_shared<Sort>(root_, col_idx, pending_order_reversed_);
+        root_ = std::make_shared<SortOp>(root_, col_idx, pending_order_reversed_);
         pending_order_col_.reset();
     }
 }
 
-QueryResult ApiPipeline::Run() {
+QueryResult Pipeline::Run() {
     MaterializePendingOrder();
     scanner_->SetColumns(parser_.GetColumnsForScan());
     scanner_->SetScanOptions(parser_.GetScanOptions());

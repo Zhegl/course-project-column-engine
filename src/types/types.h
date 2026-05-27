@@ -18,31 +18,29 @@ using ColumnData = std::variant<std::vector<int64_t>, std::vector<std::string_vi
 class ColumnTypeName {
 public:
     virtual ColumnValue ConvertType(std::string val) = 0;
-    virtual std::string GetTypeName() = 0;
+    virtual std::string GetTypeName() const = 0;
     virtual ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) = 0;
-    virtual size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) = 0;
+    virtual size_t WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) = 0;
     virtual ~ColumnTypeName() = default;
 };
 
 class ColumnTypeString : public ColumnTypeName {
 public:
     ColumnValue ConvertType(std::string val) override;
-    std::string GetTypeName() override;
+    std::string GetTypeName() const override;
     ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) override;
-    size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) override;
+    size_t WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) override;
     ~ColumnTypeString() override = default;
 };
 
 class ColumnTypeInt64 : public ColumnTypeName {
 public:
-    std::string GetTypeName() override;
+    std::string GetTypeName() const override;
     ColumnValue ConvertType(std::string val) override;
     ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) override;
-    size_t WriteType(std::vector<ColumnValue> data, FileWriter& writer) override;
+    size_t WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) override;
     ~ColumnTypeInt64() override = default;
 };
-
-// enum class ColumnTypeName { String = 0, Int64 = 1 };
 
 struct ColumnMetaData {
     std::string name;

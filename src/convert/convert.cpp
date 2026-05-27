@@ -1,4 +1,4 @@
-#include "convert.h"
+#include "convert/convert.h"
 #include <format/schema_reader.h>
 #include <format/meta_reader.h>
 #include <types/types.h>
@@ -98,11 +98,13 @@ void PrintSchema(Schema schema, const std::string& path) {
     }
 }
 
-auto get_size = [](const ColumnData& col) {
-    return std::visit([](const auto& v) { return v.size(); }, col);
-};
+namespace {
 
-auto get_value = [](const ColumnData& col, size_t i) -> ColumnValue {
+size_t GetSize(const ColumnData& col) {
+    return std::visit([](const auto& v) { return v.size(); }, col);
+}
+
+ColumnValue GetValue(const ColumnData& col, size_t i) {
     return std::visit([i](const auto& v) -> ColumnValue {
         using T = typename std::decay_t<decltype(v)>::value_type;
         if constexpr (std::is_same_v<T, std::string_view>) {
@@ -111,7 +113,9 @@ auto get_value = [](const ColumnData& col, size_t i) -> ColumnValue {
             return v[i];
         }
     }, col);
-};
+}
+
+}  // namespace
 
 void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std::string& input_path,
                 const std::string& output_path) {
@@ -127,12 +131,12 @@ void PrintTable(Schema schema, std::vector<BatchMetaData> batch_meta, const std:
             columns[col] = schema.columns[col].type->GetBatch(batch_meta[batch].size, reader);
             ++batch;
         }
-        for (size_t i = 0; i < get_size(columns[0]); ++i) {
+        for (size_t i = 0; i < GetSize(columns[0]); ++i) {
             for (size_t j = 0; j < schema.columns.size(); ++j) {
                 if (j > 0) {
                     writer.Write(',');
                 }
-                std::string data = ColumnTypeToString(get_value(columns[j], i));
+                std::string data = ColumnTypeToString(GetValue(columns[j], i));
                 bool needs_quoting = data.find('\n') != std::string::npos ||
                                      data.find(',') != std::string::npos;
                 if (needs_quoting) {

@@ -1,7 +1,7 @@
 #include "engine.h"
-#include "api.h"
+#include "engine/pipeline.h"
 #include <types/scan_options.h>
-#include "column_utils.h"
+#include "engine/column_utils.h"
 #include <format/meta_reader.h>
 #include <io/file_reader.h>
 #include <glog/logging.h>
@@ -10,7 +10,7 @@
 #include <optional>
 #include <vector>
 #include <fcntl.h>
-#include "batch.h"
+#include "engine/batch.h"
 
 namespace column_engine::internal {
 
@@ -40,22 +40,22 @@ std::optional<EngineBatch> GetAllBatches(std::shared_ptr<Operator> op, size_t li
 
 }  // namespace
 
-Scan::Scan(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
+ScanOp::ScanOp(const std::string& path, Schema schema, std::vector<BatchMetaData> batch_meta)
     : reader_(FileReader(path)),
       schema_(std::move(schema)),
       batch_meta_(std::move(batch_meta)),
       num_row_groups_(batch_meta_.size() / schema_.columns.size()) {
 }
 
-void Scan::SetColumns(std::vector<size_t> columns) {
+void ScanOp::SetColumns(std::vector<size_t> columns) {
     columns_ = columns;
 }
 
-void Scan::SetScanOptions(std::vector<std::shared_ptr<ScanOptions>> options) {
+void ScanOp::SetScanOptions(std::vector<std::shared_ptr<ScanOptions>> options) {
     scan_options_ = std::move(options);
 }
 
-std::optional<EngineBatch> Scan::GetNext() {
+std::optional<EngineBatch> ScanOp::GetNext() {
     if (current_row_group_ >= num_row_groups_) {
         return std::nullopt;
     }
@@ -95,9 +95,9 @@ std::optional<EngineBatch> Scan::GetNext() {
     return result;
 }
 
-// Filter
+// FilterOp
 
-std::optional<EngineBatch> Filter::GetNext() {
+std::optional<EngineBatch> FilterOp::GetNext() {
     while (auto batch = child_->GetNext()) {
         batch->selection = pred_->CheckBatch(*batch, batch->selection);
         if (!batch->selection.empty()) {
@@ -107,11 +107,11 @@ std::optional<EngineBatch> Filter::GetNext() {
     return std::nullopt;
 }
 
-// Aggregate
+// AggregateOp
 
-void Aggregate::ProcessBatch(EngineBatch& batch,
-                              const std::vector<ColDesc>& col_descs,
-                              bool only_count_all) {
+void AggregateOp::ProcessBatch(EngineBatch& batch,
+                                const std::vector<ColDesc>& col_descs,
+                                bool only_count_all) {
     std::vector<ColPtr> ptrs(col_descs.size());
     for (size_t k = 0; k < col_descs.size(); ++k) {
         const auto& col = batch.columns[col_descs[k].col_idx];
@@ -203,7 +203,7 @@ void Aggregate::ProcessBatch(EngineBatch& batch,
     }
 }
 
-void Aggregate::Run() {
+void AggregateOp::Run() {
     ready_ = true;
     has_count_all_ = !factories_.empty() && factories_[0].is_count_all;
     const bool only_count_all = has_count_all_ && factories_.size() == 1;
@@ -229,7 +229,7 @@ void Aggregate::Run() {
     cur_idx_ = groups_.FirstUsed();
 }
 
-std::optional<EngineBatch> Aggregate::GetNext() {
+std::optional<EngineBatch> AggregateOp::GetNext() {
     if (!ready_) {
         Run();
     }
@@ -339,7 +339,7 @@ std::optional<EngineBatch> OffsetOp::GetNext() {
     return result;
 }
 
-std::optional<EngineBatch> Sort::GetNext() {
+std::optional<EngineBatch> SortOp::GetNext() {
     if (auto result = GetAllBatches(child_)) {
         const ColumnData& col = result->columns[col_idx_];
         std::sort(result->selection.begin(), result->selection.end(),
@@ -352,7 +352,7 @@ std::optional<EngineBatch> Sort::GetNext() {
     return std::nullopt;
 }
 
-std::optional<EngineBatch> As::GetNext() {
+std::optional<EngineBatch> AsOp::GetNext() {
     if (auto batch = child_->GetNext()) {
         for (auto& col : batch->names) {
             if (col == from_) {
@@ -364,7 +364,7 @@ std::optional<EngineBatch> As::GetNext() {
     return std::nullopt;
 }
 
-std::optional<EngineBatch> TopK::GetNext() {
+std::optional<EngineBatch> TopKOp::GetNext() {
     if (limit_ == 0) {
         return GetAllBatches(child_, 0);
     }
@@ -375,7 +375,7 @@ std::optional<EngineBatch> TopK::GetNext() {
     };
 
     std::function<bool(const Row&, const Row&)> is_better;
-    if (col_idx_2_ != -1) {
+    if (col_idx_2_) {
         is_better = [&](const Row& lhs, const Row& rhs) {
             const ColumnValue& l = lhs.values[col_idx_];
             const ColumnValue& r = rhs.values[col_idx_];
@@ -385,7 +385,7 @@ std::optional<EngineBatch> TopK::GetNext() {
             if (LessColumnValue(r, l)) {
                 return reversed_;
             }
-            return LessColumnValue(lhs.values[col_idx_2_], rhs.values[col_idx_2_]);
+            return LessColumnValue(lhs.values[*col_idx_2_], rhs.values[*col_idx_2_]);
         };
     } else {
         is_better = [&](const Row& lhs, const Row& rhs) {
@@ -457,12 +457,10 @@ Engine::Engine(const std::string& path) : path_(path) {
     auto [batch_meta, schema] = GetMeta(path_);
     batch_meta_ = std::move(batch_meta);
     schema_ = std::move(schema);
-    // LOG(INFO) << "Engine started, " << schema_.columns.size() << " columns, "
-    //           << batch_meta_.size() / schema_.columns.size() << " row groups";
 }
 
-std::shared_ptr<Scan> Engine::MakeScan() {
-    return std::make_shared<Scan>(path_, schema_, batch_meta_);
+std::shared_ptr<ScanOp> Engine::MakeScan() {
+    return std::make_shared<ScanOp>(path_, schema_, batch_meta_);
 }
 
 EngineBatch Engine::Run(std::shared_ptr<Operator> root,
@@ -485,8 +483,8 @@ EngineBatch Engine::Run(std::shared_ptr<Operator> root,
     return EngineBatch{};
 }
 
-ApiPipeline Engine::Api() {
-    return ApiPipeline(*this, schema_);
+Pipeline Engine::Api() {
+    return Pipeline(*this, schema_);
 }
 
 }  // namespace column_engine::internal

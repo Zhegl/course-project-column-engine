@@ -1,4 +1,4 @@
-#include "schema_reader.h"
+#include "format/schema_reader.h"
 #include <cctype>
 #include <stdexcept>
 #include <string>
@@ -6,7 +6,7 @@
 
 namespace column_engine {
 
-bool IsSensible(char c) {
+static bool IsSensible(char c) {
     return std::isgraph(c);
 }
 

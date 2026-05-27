@@ -1,7 +1,7 @@
 #pragma once
 #include <stdexcept>
 #include <string>
-#include "batch.h"
+#include "engine/batch.h"
 
 namespace column_engine::internal {
 

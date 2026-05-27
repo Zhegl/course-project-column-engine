@@ -112,13 +112,6 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader, const Sca
         std::memcpy(bloom_raw, bloom_ptr, kBloomBytes);
 
         bool skip = false;
-        if (str_opts->skip_empty) {
-            bool all_zero = true;
-            for (size_t i = 0; i < kBloomWords; ++i) {
-                if (bloom_raw[i]) { all_zero = false; break; }
-            }
-            skip = all_zero;
-        }
         if (!skip && str_opts->bloom) {
             skip = !str_opts->bloom->CheckIn(bloom_raw, kBloomWords);
         }
@@ -141,6 +134,12 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader, const Sca
     size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
                          (n_uwords + 1) * sizeof(uint32_t);
     size_t raw_size = final_offset - header_size;
+
+    if (options && static_cast<const StringScanOptions*>(options)->skip_empty && raw_size == 0) {
+        reader.Jump(size - kBloomBytes - header_size);
+        return std::vector<std::string_view>{};
+    }
+
     const char* raw = reader.Peek(raw_size);
 
     ColumnTypeInt64 helper;

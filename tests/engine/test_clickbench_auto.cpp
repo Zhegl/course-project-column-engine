@@ -2,7 +2,6 @@
 #include <glog/logging.h>
 #include <engine/engine.h>
 #include <app/clickbench_queries.h>
-#include <convert/convert.h>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -131,14 +130,6 @@ int main(int argc, char** argv) {
     ::testing::InitGoogleTest(&argc, argv);
     google::InitGoogleLogging(argv[0]);
     FLAGS_logtostderr = 1;
-
-    for (int i = 1; i < argc; ++i) {
-        if (std::string(argv[i]) == "--convert") {
-            column_engine::ConvertToColumnar(kHitsCsv, kSchemaCsv, kColFile, 8192);
-            return 0;
-        }
-    }
-
     int result = RUN_ALL_TESTS();
     google::ShutdownGoogleLogging();
     return result;

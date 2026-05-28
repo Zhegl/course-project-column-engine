@@ -1,5 +1,5 @@
 #pragma once
-#include <re2/re2.h>
+#include <regex>
 #include <string>
 #include "engine/batch.h"
 #include "engine/predicates.h"
@@ -127,38 +127,23 @@ public:
                   std::string replacement)
         : col_idx_(col_idx),
           col_name_(std::move(col_name)),
-          pattern_(std::move(pattern)),
-          re_(pattern_),
-          raw_replacement_(replacement),
-          replacement_(ConvertReplacement(replacement)) {
+          pattern_(pattern),
+          re_(pattern),
+          replacement_(std::move(replacement)) {
     }
     ColumnValue Get(EngineBatch& batch, RowIndex i) override {
-        std::string s(GetStrAt(batch.columns[col_idx_], i));
-        re2::RE2::Replace(&s, re_, replacement_);
-        return s;
+        auto sv = GetStrAt(batch.columns[col_idx_], i);
+        return std::regex_replace(std::string(sv), re_, replacement_);
     }
     std::string GetName() const override {
-        return "regexp_replace(" + col_name_ + ", '" + pattern_ + "', '" + raw_replacement_ + "')";
+        return "regexp_replace(" + col_name_ + ", '" + pattern_ + "', '" + replacement_ + "')";
     }
 
 private:
-    static std::string ConvertReplacement(const std::string& r) {
-        std::string out;
-        for (size_t i = 0; i < r.size(); ++i) {
-            if (r[i] == '$' && i + 1 < r.size() && std::isdigit(r[i + 1])) {
-                out += '\\';
-            } else {
-                out += r[i];
-            }
-        }
-        return out;
-    }
-
     size_t col_idx_;
     std::string col_name_;
     std::string pattern_;
-    re2::RE2 re_;
-    std::string raw_replacement_;
+    std::regex re_;
     std::string replacement_;
 };
 

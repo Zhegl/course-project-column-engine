@@ -290,7 +290,7 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader, const ScanOptio
             for (size_t i = 0; i < n; ++i) {
                 uint64_t v = 0;
                 memcpy(&v, ptr + i * sz, sz);
-                result.push_back(static_cast<int64_t>(static_cast<uint64_t>(base) + v));
+                result.push_back(base + static_cast<int64_t>(v));
             }
         }
     }

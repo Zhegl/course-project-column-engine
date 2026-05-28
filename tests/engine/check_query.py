@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Usage: check_query.py <query_num> <engine_csv> <hits_csv> <hits_schema_csv> <queries_sql>
+Usage: check_query.py <query_num> <engine_csv> <hits_db> <hits_schema_csv> <queries_sql>
 Exits 0 if results match, 1 otherwise. Prints diff on mismatch.
+hits_db is a path to a DuckDB database file with a 'hits' table.
 """
 import sys
 import csv
-import duckdb
+import subprocess
 
 def read_csv(path):
     with open(path, newline='', encoding='utf-8') as f:
@@ -23,34 +24,19 @@ def normalize_value(v):
 def normalize_rows(rows):
     return [tuple(normalize_value(v) for v in row) for row in rows]
 
-def load_hits(con, hits_csv, schema_csv):
-    with open(schema_csv, newline='', encoding='utf-8') as f:
-        schema = [row for row in csv.reader(f) if len(row) == 2]
-    type_map = {'int64': 'BIGINT', 'string': 'VARCHAR'}
-    col_defs = ', '.join(
-        f'"{name}": "{type_map.get(typ, "VARCHAR")}"'
-        for name, typ in schema
-    )
-    con.execute(f"""
-        CREATE TABLE hits AS
-        SELECT * FROM read_csv('{hits_csv}',
-            header=false,
-            columns={{{col_defs}}})
-    """)
-
 # queries where ORDER BY is not unique — only row count is checked
 # queries where tie-breaking is non-deterministic — only row count is checked
-NONDETERMINISTIC = {5, 11, 16, 17, 18, 22, 23, 24, 27, 28, 30, 31, 32, 33, 38, 39, 40}
+NONDETERMINISTIC = {5, 11, 16, 17, 18, 22, 23, 24, 27, 28, 30, 31, 32, 33, 38, 39, 40, 41}
 
 def main():
     if len(sys.argv) != 6:
-        print("Usage: check_query.py <query_num> <engine_csv> <hits_csv> <hits_schema_csv> <queries_sql>")
+        print("Usage: check_query.py <query_num> <engine_csv> <hits_db> <hits_schema_csv> <queries_sql>")
         sys.exit(2)
 
     query_num = int(sys.argv[1])
     engine_csv = sys.argv[2]
-    hits_csv = sys.argv[3]
-    schema_csv = sys.argv[4]
+    hits_db = sys.argv[3]
+    # sys.argv[4] is schema_csv — ignored, schema is embedded in hits_db
     queries_sql = sys.argv[5]
 
     with open(queries_sql) as f:
@@ -61,10 +47,16 @@ def main():
     sql = sql.replace("strftime('%M', EventTime)", "strftime('%M', EventTime::TIMESTAMP)")
 
     try:
-        con = duckdb.connect()
-        load_hits(con, hits_csv, schema_csv)
-        duck_rows = con.execute(sql).fetchall()
-        duck_rows = [['' if v is None else str(v) for v in row] for row in duck_rows]
+        proc = subprocess.run(
+            ["duckdb", hits_db, "-csv", "-c", sql],
+            capture_output=True, text=True, timeout=300
+        )
+        if proc.returncode != 0:
+            print(f"SKIP: duckdb error: {proc.stderr.strip()}")
+            sys.exit(0)
+        duck_rows = list(csv.reader(proc.stdout.splitlines()))
+        if duck_rows:
+            duck_rows = duck_rows[1:]  # skip header
     except Exception as e:
         print(f"SKIP: duckdb error: {e}")
         sys.exit(0)

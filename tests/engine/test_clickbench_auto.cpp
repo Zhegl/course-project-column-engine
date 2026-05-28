@@ -10,7 +10,7 @@
 #include <cstdio>
 
 static constexpr const char* kColFile    = "col.col";
-static constexpr const char* kHitsCsv   = "hits_sample.csv";
+static constexpr const char* kHitsDb     = "hits.db";
 static constexpr const char* kSchemaCsv  = "hits_schema.csv";
 static constexpr const char* kQueriesSql = "queries.sql";
 static constexpr const char* kCheckPy    = "check_query.py";
@@ -59,7 +59,7 @@ static void RunQueryTest(int query_num) {
     std::string cmd = std::string("python3 ") + kCheckPy
         + " " + std::to_string(query_num)
         + " " + tmp_csv
-        + " " + kHitsCsv
+        + " " + kHitsDb
         + " " + kSchemaCsv
         + " " + kQueriesSql
         + " 2>&1";
@@ -134,7 +134,7 @@ int main(int argc, char** argv) {
 
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--convert") {
-            column_engine::ConvertToColumnar(kHitsCsv, kSchemaCsv, kColFile, 8192);
+            column_engine::ConvertToColumnar(kHitsDb, kSchemaCsv, kColFile, 8192);
             return 0;
         }
     }

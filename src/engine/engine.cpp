@@ -109,38 +109,6 @@ std::optional<EngineBatch> FilterOp::GetNext() {
 
 // AggregateOp
 
-void AggregateOp::UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all) {
-    if (has_count_all_) { slot.count++; }
-    if (!only_count_all) {
-        if (slot.rest.empty()) {
-            size_t first = static_cast<size_t>(has_count_all_);
-            slot.rest.reserve(factories_.size() - first);
-            for (size_t f = first; f < factories_.size(); ++f) {
-                slot.rest.push_back(factories_[f].make());
-            }
-        }
-        for (auto& agg : slot.rest) { agg->Next(batch, i); }
-    }
-}
-
-void AggregateOp::BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs,
-                            const std::vector<ColPtr>& ptrs, std::vector<char>& buf) {
-    for (size_t k = 0; k < col_descs.size(); ++k) {
-        if (!col_descs[k].is_str) {
-            size_t cur = buf.size();
-            buf.resize(cur + sizeof(int64_t));
-            __builtin_memcpy(buf.data() + cur, &ptrs[k].ints[i], sizeof(int64_t));
-        } else {
-            std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
-            uint32_t len = static_cast<uint32_t>(sv.size());
-            size_t cur = buf.size();
-            buf.resize(cur + sizeof(uint32_t) + len);
-            __builtin_memcpy(buf.data() + cur, &len, sizeof(uint32_t));
-            __builtin_memcpy(buf.data() + cur + sizeof(uint32_t), sv.data(), len);
-        }
-    }
-}
-
 void AggregateOp::ProcessBatch(EngineBatch& batch,
                                 const std::vector<ColDesc>& col_descs,
                                 bool only_count_all) {
@@ -157,44 +125,76 @@ void AggregateOp::ProcessBatch(EngineBatch& batch,
     }
 
     const size_t n = batch.selection.size();
+
+    auto update_slot = [&](AggSlot& slot, RowIndex i) {
+        if (has_count_all_) { slot.count++; }
+        if (!only_count_all) {
+            size_t first = has_count_all_ ? 1 : 0;
+            if (slot.rest.empty()) {
+                slot.rest.reserve(factories_.size() - first);
+                for (size_t f = first; f < factories_.size(); ++f) {
+                    slot.rest.push_back(factories_[f].make());
+                }
+            }
+            for (auto& agg : slot.rest) { agg->Next(batch, i); }
+        }
+    };
+
+    auto build_key = [&](RowIndex i, std::vector<char>& buf) {
+        for (size_t k = 0; k < col_descs.size(); ++k) {
+            if (!col_descs[k].is_str) {
+                size_t cur = buf.size();
+                buf.resize(cur + sizeof(int64_t));
+                __builtin_memcpy(buf.data() + cur, &ptrs[k].ints[i], sizeof(int64_t));
+            } else {
+                std::string_view sv = ptrs[k].svs ? ptrs[k].svs[i] : std::string_view(ptrs[k].strs[i]);
+                uint32_t len = static_cast<uint32_t>(sv.size());
+                size_t cur = buf.size();
+                buf.resize(cur + sizeof(uint32_t) + len);
+                __builtin_memcpy(buf.data() + cur, &len, sizeof(uint32_t));
+                __builtin_memcpy(buf.data() + cur + sizeof(uint32_t), sv.data(), len);
+            }
+        }
+    };
+
     const bool use_prefetch = groups_.Size() >= kPrefetchThreshold;
 
     if (!use_prefetch) {
-        key_buffer_.clear();
+        std::vector<char> key_buf;
         for (size_t idx = 0; idx < n; ++idx) {
             RowIndex i = batch.selection[idx];
-            key_buffer_.clear();
-            BuildKey(i, col_descs, ptrs, key_buffer_);
-            std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
+            key_buf.clear();
+            build_key(i, key_buf);
+            std::string_view lookup_key(key_buf.data(), key_buf.size());
             auto& slot = groups_.FindOrInsert(
                 lookup_key, [&](std::string_view fresh_key) { return arena_.Alloc(fresh_key); });
-            UpdateSlot(slot, batch, i, only_count_all);
+            update_slot(slot, i);
         }
         return;
     }
 
-    prefetch_key_buf_.clear();
-    prefetch_hashes_.resize(n);
-    prefetch_key_spans_.resize(n);
+    std::vector<char> prefetch_key_buf;
+    std::vector<size_t> prefetch_hashes(n);
+    std::vector<std::pair<size_t, size_t>> prefetch_key_spans(n);
 
     for (size_t idx = 0; idx < n; ++idx) {
         RowIndex i = batch.selection[idx];
-        size_t start = prefetch_key_buf_.size();
-        BuildKey(i, col_descs, ptrs, prefetch_key_buf_);
-        size_t end = prefetch_key_buf_.size();
-        prefetch_key_spans_[idx] = {start, end - start};
-        prefetch_hashes_[idx] = StringViewHash{}(
-            std::string_view(prefetch_key_buf_.data() + start, end - start));
+        size_t start = prefetch_key_buf.size();
+        build_key(i, prefetch_key_buf);
+        size_t end = prefetch_key_buf.size();
+        prefetch_key_spans[idx] = {start, end - start};
+        prefetch_hashes[idx] = StringViewHash{}(
+            std::string_view(prefetch_key_buf.data() + start, end - start));
     }
 
     for (size_t idx = 0; idx < n; ++idx) {
-        if (idx + kPrefetchDist < n) { groups_.Prefetch(prefetch_hashes_[idx + kPrefetchDist]); }
-        auto [off, len] = prefetch_key_spans_[idx];
-        std::string_view lookup_key(prefetch_key_buf_.data() + off, len);
+        if (idx + kPrefetchDist < n) { groups_.Prefetch(prefetch_hashes[idx + kPrefetchDist]); }
+        auto [off, len] = prefetch_key_spans[idx];
+        std::string_view lookup_key(prefetch_key_buf.data() + off, len);
         auto& slot = groups_.FindOrInsert(
-            lookup_key, prefetch_hashes_[idx],
+            lookup_key, prefetch_hashes[idx],
             [&](std::string_view fresh_key) { return arena_.Alloc(fresh_key); });
-        UpdateSlot(slot, batch, batch.selection[idx], only_count_all);
+        update_slot(slot, batch.selection[idx]);
     }
 }
 

@@ -94,8 +94,6 @@ private:
 
     void Run();
     void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs, bool only_count_all);
-    void UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all);
-    void BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs, const std::vector<ColPtr>& ptrs, std::vector<char>& buf);
 
     bool ready_{false};
     size_t cur_idx_{0};
@@ -110,10 +108,6 @@ private:
     HashMap<std::string_view, AggSlot, StringViewHash> groups_;
     Arena arena_;
     std::vector<bool> is_string_column_;
-    std::vector<char> key_buffer_;
-    std::vector<char> prefetch_key_buf_;
-    std::vector<size_t> prefetch_hashes_;
-    std::vector<std::pair<size_t, size_t>> prefetch_key_spans_;
 };
 
 class LimitOp : public Operator {

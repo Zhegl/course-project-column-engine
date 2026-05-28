@@ -6,5 +6,5 @@ apt-get install -y --no-install-recommends \
     cmake ninja-build \
     clang \
     ca-certificates \
-    libjemalloc-dev
+    libre2-dev
 rm -rf /var/lib/apt/lists/*

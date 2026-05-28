@@ -37,7 +37,7 @@ class ColumnTypeInt64 : public ColumnTypeName {
 public:
     std::string GetTypeName() const override;
     ColumnValue ConvertType(std::string val) override;
-    [[gnu::always_inline]] ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) override;
+    [[gnu::always_inline]] inline ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) override;
     size_t WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) override;
     ~ColumnTypeInt64() override = default;
 };

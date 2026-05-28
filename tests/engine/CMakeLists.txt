@@ -9,17 +9,6 @@ target_link_libraries(test_engine
         glog::glog
 )
 
-add_executable(test_clickbench
-    test_clickbench.cpp
-)
-target_link_libraries(test_clickbench
-    PRIVATE
-        api_lib
-        convert_lib
-        gtest
-        glog::glog
-)
-
 add_executable(test_clickbench_auto
     test_clickbench_auto.cpp
 )
@@ -30,6 +19,7 @@ target_include_directories(test_clickbench_auto
 target_link_libraries(test_clickbench_auto
     PRIVATE
         api_lib
+        convert_lib
         gtest
         glog::glog
 )

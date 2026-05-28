@@ -109,7 +109,7 @@ std::optional<EngineBatch> FilterOp::GetNext() {
 
 // AggregateOp
 
-void AggregateOp::UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all) {
+inline void AggregateOp::UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all) {
     if (has_count_all_) { slot.count++; }
     if (!only_count_all) {
         if (slot.rest.empty()) {
@@ -123,7 +123,7 @@ void AggregateOp::UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool
     }
 }
 
-void AggregateOp::BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs,
+inline void AggregateOp::BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs,
                             const std::vector<ColPtr>& ptrs, std::vector<char>& buf) {
     for (size_t k = 0; k < col_descs.size(); ++k) {
         if (!col_descs[k].is_str) {

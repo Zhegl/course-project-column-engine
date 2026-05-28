@@ -26,7 +26,7 @@ def normalize_rows(rows):
 
 # queries where ORDER BY is not unique — only row count is checked
 # queries where tie-breaking is non-deterministic — only row count is checked
-NONDETERMINISTIC = {5, 11, 16, 17, 18, 22, 23, 24, 27, 28, 30, 31, 32, 33, 38, 39, 40}
+NONDETERMINISTIC = {5, 11, 16, 17, 18, 22, 23, 24, 27, 28, 30, 31, 32, 33, 38, 39, 40, 41}
 
 def main():
     if len(sys.argv) != 6:

@@ -1,7 +1,6 @@
 include(FetchContent)
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
   re2

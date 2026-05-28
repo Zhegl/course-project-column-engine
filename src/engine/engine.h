@@ -94,6 +94,8 @@ private:
 
     void Run();
     void ProcessBatch(EngineBatch& batch, const std::vector<ColDesc>& col_descs, bool only_count_all);
+    [[gnu::always_inline]] void UpdateSlot(AggSlot& slot, EngineBatch& batch, RowIndex i, bool only_count_all);
+    [[gnu::always_inline]] void BuildKey(RowIndex i, const std::vector<ColDesc>& col_descs, const std::vector<ColPtr>& ptrs, std::vector<char>& buf);
 
     bool ready_{false};
     size_t cur_idx_{0};

@@ -246,7 +246,7 @@ size_t ColumnTypeInt64::WriteType(const std::vector<ColumnValue>& data, FileWrit
     return result;
 }
 
-ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader, const ScanOptions*) {
+inline ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader, const ScanOptions*) {
     std::vector<int64_t> result;
     std::vector<int64_t> min_val;
     std::vector<uint8_t> read_sz;

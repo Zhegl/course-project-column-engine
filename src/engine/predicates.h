@@ -34,7 +34,7 @@ public:
 class IntConstNE : public FilterPredicate {
 public:
     IntConstNE(size_t id_a, int64_t const_b) : id_a_(id_a), const_b_(const_b) {}
-    bool Check(const EngineBatch& batch, RowIndex i) override {
+    [[gnu::always_inline]] bool Check(const EngineBatch& batch, RowIndex i) override {
         return std::get<std::vector<int64_t>>(batch.columns[id_a_])[i] != const_b_;
     }
 private:

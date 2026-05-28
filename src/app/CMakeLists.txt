@@ -20,5 +20,6 @@ add_executable(run_query
 target_link_libraries(run_query
     PRIVATE
         api_lib
+        io_lib
         glog::glog
 )

@@ -13,6 +13,7 @@ run-clang-format.py
 /tmp
 commands.sh
 env.sh
+scripts/env.sh
 input.csv
 input2.csv
 schema.csv

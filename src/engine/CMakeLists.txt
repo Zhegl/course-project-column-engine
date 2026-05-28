@@ -16,6 +16,7 @@ target_include_directories(engine_lib
 target_link_libraries(engine_lib
     PUBLIC
         glog::glog
+        re2
 )
 
 target_link_libraries(engine_lib

@@ -160,12 +160,12 @@ void AggregateOp::ProcessBatch(EngineBatch& batch,
     const bool use_prefetch = groups_.Size() >= kPrefetchThreshold;
 
     if (!use_prefetch) {
-        std::vector<char> key_buf;
+        key_buffer_.clear();
         for (size_t idx = 0; idx < n; ++idx) {
             RowIndex i = batch.selection[idx];
-            key_buf.clear();
-            BuildKey(i, col_descs, ptrs, key_buf);
-            std::string_view lookup_key(key_buf.data(), key_buf.size());
+            key_buffer_.clear();
+            BuildKey(i, col_descs, ptrs, key_buffer_);
+            std::string_view lookup_key(key_buffer_.data(), key_buffer_.size());
             auto& slot = groups_.FindOrInsert(
                 lookup_key, [&](std::string_view fresh_key) { return arena_.Alloc(fresh_key); });
             UpdateSlot(slot, batch, i, only_count_all);
@@ -173,26 +173,26 @@ void AggregateOp::ProcessBatch(EngineBatch& batch,
         return;
     }
 
-    std::vector<char> prefetch_key_buf;
-    std::vector<size_t> prefetch_hashes(n);
-    std::vector<std::pair<size_t, size_t>> prefetch_key_spans(n);
+    prefetch_key_buf_.clear();
+    prefetch_hashes_.resize(n);
+    prefetch_key_spans_.resize(n);
 
     for (size_t idx = 0; idx < n; ++idx) {
         RowIndex i = batch.selection[idx];
-        size_t start = prefetch_key_buf.size();
-        BuildKey(i, col_descs, ptrs, prefetch_key_buf);
-        size_t end = prefetch_key_buf.size();
-        prefetch_key_spans[idx] = {start, end - start};
-        prefetch_hashes[idx] = StringViewHash{}(
-            std::string_view(prefetch_key_buf.data() + start, end - start));
+        size_t start = prefetch_key_buf_.size();
+        BuildKey(i, col_descs, ptrs, prefetch_key_buf_);
+        size_t end = prefetch_key_buf_.size();
+        prefetch_key_spans_[idx] = {start, end - start};
+        prefetch_hashes_[idx] = StringViewHash{}(
+            std::string_view(prefetch_key_buf_.data() + start, end - start));
     }
 
     for (size_t idx = 0; idx < n; ++idx) {
-        if (idx + kPrefetchDist < n) { groups_.Prefetch(prefetch_hashes[idx + kPrefetchDist]); }
-        auto [off, len] = prefetch_key_spans[idx];
-        std::string_view lookup_key(prefetch_key_buf.data() + off, len);
+        if (idx + kPrefetchDist < n) { groups_.Prefetch(prefetch_hashes_[idx + kPrefetchDist]); }
+        auto [off, len] = prefetch_key_spans_[idx];
+        std::string_view lookup_key(prefetch_key_buf_.data() + off, len);
         auto& slot = groups_.FindOrInsert(
-            lookup_key, prefetch_hashes[idx],
+            lookup_key, prefetch_hashes_[idx],
             [&](std::string_view fresh_key) { return arena_.Alloc(fresh_key); });
         UpdateSlot(slot, batch, batch.selection[idx], only_count_all);
     }

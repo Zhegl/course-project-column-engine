@@ -1,4 +1,5 @@
 #include <convert/convert.h>
+#include <types/experiment_config.h>
 #include <glog/logging.h>
 #include <cstdlib>
 #include <iostream>
@@ -7,9 +8,8 @@
 namespace column_engine {
 
 void Usage() {
-    std::cout << "Usage: convert --input <file> --output <file> --schema <file> [--batch <size>] "
-                 "[--reversed]"
-              << std::endl;
+    std::cout << "Usage: convert --input <file> --output <file> --schema <file> "
+                 "[--batch <size>] [--encoding lzw] [--rle-threshold <N>] [--reversed]\n";
     exit(1);
 }
 
@@ -19,6 +19,7 @@ void Run(int argc, char** argv) {
     std::string output_path;
     std::string schema_path;
     bool reverse = false;
+    bool use_lzw = false;
     size_t i = 0;
 
     while (++i < argc) {
@@ -42,14 +43,18 @@ void Run(int argc, char** argv) {
         } else if (arg_name == "--schema") {
             schema_path = arg;
         } else if (arg_name == "--batch") {
-            batch_size = std::stoll(arg);
+            batch_size = std::stoull(arg);
+        } else if (arg_name == "--encoding") {
+            use_lzw = (arg == "lzw");
+        } else if (arg_name == "--rle-threshold") {
+            ExperimentConfig::Get().rle_threshold = std::stoull(arg);
         } else {
             Usage();
         }
     }
 
     if (!reverse) {
-        ConvertToColumnar(input_path, schema_path, output_path, batch_size);
+        ConvertToColumnar(input_path, schema_path, output_path, batch_size, use_lzw);
     } else {
         ConvertToCsv(input_path, schema_path, output_path);
     }

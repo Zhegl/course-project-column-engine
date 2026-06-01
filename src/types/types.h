@@ -42,6 +42,16 @@ public:
     ~ColumnTypeInt64() override = default;
 };
 
+// LZW-compressed string column — written as "string_lzw", incompatible on-disk with ColumnTypeString
+class ColumnTypeStringLZW : public ColumnTypeName {
+public:
+    ColumnValue ConvertType(std::string val) override;
+    std::string GetTypeName() const override;
+    ColumnData GetBatch(size_t size, FileReader& reader, const ScanOptions* options = nullptr) override;
+    size_t WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) override;
+    ~ColumnTypeStringLZW() override = default;
+};
+
 struct ColumnMetaData {
     std::string name;
     std::shared_ptr<ColumnTypeName> type;

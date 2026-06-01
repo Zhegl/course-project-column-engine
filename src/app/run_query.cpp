@@ -1,5 +1,5 @@
 #include <api/columnar_engine.h>
-
+#include <types/experiment_config.h>
 
 #include <glog/logging.h>
 #include <fstream>
@@ -9,6 +9,7 @@
 #include "app/clickbench_queries.h"
 
 using column_engine::Engine;
+using column_engine::ExperimentConfig;
 using column_engine::QueryResult;
 
 static std::string CsvField(const std::string& s) {
@@ -45,13 +46,22 @@ int main(int argc, char** argv) {
     FLAGS_logtostderr = 1;
 
     if (argc < 4) {
-        std::cerr << "Usage: run_query <query_num> <columnar_file> <output_csv> [log_file]\n";
+        std::cerr << "Usage: run_query <query_num> <columnar_file> <output_csv> [--no-bloom] [--rle-threshold=N]\n";
         return 1;
     }
 
     int query_num = std::stoi(argv[1]);
     std::string columnar = argv[2];
     std::string output_path = argv[3];
+
+    for (int i = 4; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "--no-bloom") {
+            ExperimentConfig::Get().use_bloom = false;
+        } else if (arg.rfind("--rle-threshold=", 0) == 0) {
+            ExperimentConfig::Get().rle_threshold = std::stoull(arg.substr(16));
+        }
+    }
 
     try {
         Engine engine(columnar);

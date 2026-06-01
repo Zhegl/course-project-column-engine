@@ -10,4 +10,5 @@ target_include_directories(types_lib
 target_link_libraries(types_lib
     PUBLIC
         glog::glog
+        io_lib
 )

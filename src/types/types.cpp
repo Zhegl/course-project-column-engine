@@ -1,6 +1,7 @@
 #include "types/types.h"
 #include "engine/bloom.h"
 #include "types/scan_options.h"
+#include "types/experiment_config.h"
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
@@ -18,6 +19,8 @@ std::shared_ptr<ColumnTypeName> GetType(const std::string& name) {
         return std::make_shared<ColumnTypeInt64>();
     } else if (name == "string") {
         return std::make_shared<ColumnTypeString>();
+    } else if (name == "string_lzw") {
+        return std::make_shared<ColumnTypeStringLZW>();
     }
     throw std::runtime_error("Unknown column type: " + name);
 }
@@ -105,14 +108,14 @@ ColumnData ColumnTypeString::GetBatch(size_t size, FileReader& reader, const Sca
     constexpr size_t kBloomWords = 256;
     constexpr size_t kBloomBytes = kBloomWords * sizeof(uint64_t);
 
-    if (options) {
+    if (options && ExperimentConfig::Get().use_bloom) {
         const auto* str_opts = static_cast<const StringScanOptions*>(options);
         const char* bloom_ptr = reader.Peek(kBloomBytes);
         uint64_t bloom_raw[kBloomWords];
         std::memcpy(bloom_raw, bloom_ptr, kBloomBytes);
 
         bool skip = false;
-        if (!skip && str_opts->bloom) {
+        if (str_opts->bloom) {
             skip = !str_opts->bloom->CheckIn(bloom_raw, kBloomWords);
         }
         if (skip) {
@@ -176,7 +179,7 @@ ColumnValue ColumnTypeInt64::ConvertType(std::string val) {
 
 size_t ColumnTypeInt64::WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) {
     const size_t block_size = 512;
-    const size_t rle_decision = 5;
+    const size_t rle_decision = ExperimentConfig::Get().rle_threshold;
 
     uint16_t blocks = static_cast<uint16_t>((data.size() + block_size - 1) / block_size);
     uint32_t n_values = static_cast<uint32_t>(data.size());
@@ -295,6 +298,166 @@ ColumnData ColumnTypeInt64::GetBatch(size_t, FileReader& reader, const ScanOptio
         }
     }
 
+    return result;
+}
+
+// ColumnTypeStringLZW
+
+std::string ColumnTypeStringLZW::GetTypeName() const {
+    return "string_lzw";
+}
+
+ColumnValue ColumnTypeStringLZW::ConvertType(std::string val) {
+    return val;
+}
+
+size_t ColumnTypeStringLZW::WriteType(const std::vector<ColumnValue>& data, FileWriter& writer) {
+    constexpr size_t kBloomWords = 256;
+    constexpr size_t kDictMaxSize = 65535;
+    constexpr size_t kMinWord = 10;
+
+    // Build bloom over unique strings (same layout as ColumnTypeString)
+    internal::BloomFilter bloom(kBloomWords);
+    {
+        std::unordered_set<std::string> seen;
+        for (const auto& val : data) {
+            const auto& s = std::get<std::string>(val);
+            if (seen.insert(s).second) {
+                bloom.Add(s);
+            }
+        }
+    }
+
+    size_t result = 0;
+    for (uint64_t word : bloom.Bits()) {
+        writer.Write(word);
+        result += sizeof(word);
+    }
+
+    // LZW encode all strings concatenated with \0 terminator per value
+    std::unordered_map<std::string, int64_t> dict;
+    std::vector<std::string> reverse_dict;
+    std::unordered_map<std::string, int64_t> dict_wanted;
+
+    for (size_t c = 0; c < 256; ++c) {
+        std::string ch(1, static_cast<char>(c));
+        dict[ch] = static_cast<int64_t>(dict.size());
+        reverse_dict.push_back(ch);
+    }
+
+    std::vector<ColumnValue> idx;
+    std::string cur;
+
+    for (const auto& val : data) {
+        std::string s = std::get<std::string>(val);
+        s.push_back('\0');
+        for (size_t i = 0; i < s.size(); ++i) {
+            cur += s[i];
+            bool last = (i == s.size() - 1);
+            std::string next_pair = last ? "" : cur + s[i + 1];
+            if (last || dict.find(next_pair) == dict.end()) {
+                if (cur.size() == 1 && !last && dict.size() < kDictMaxSize) {
+                    dict[next_pair] = static_cast<int64_t>(dict.size());
+                    reverse_dict.push_back(next_pair);
+                    continue;
+                }
+                idx.emplace_back(dict[cur]);
+                if (!last && dict.size() < kDictMaxSize) {
+                    ++dict_wanted[next_pair];
+                    if (dict_wanted[next_pair] > kMinWord || cur.size() < 2) {
+                        dict[next_pair] = static_cast<int64_t>(dict.size());
+                        reverse_dict.push_back(next_pair);
+                    }
+                }
+                cur.clear();
+            }
+        }
+    }
+
+    uint16_t n_words = static_cast<uint16_t>(data.size());
+    uint16_t n_uwords = static_cast<uint16_t>(reverse_dict.size());
+    uint32_t words_size = 0;
+    for (const auto& str : reverse_dict) {
+        words_size += static_cast<uint32_t>(str.size());
+    }
+    uint32_t final_offset = sizeof(n_words) + sizeof(n_uwords) + sizeof(uint32_t) +
+                            (n_uwords + 1) * sizeof(uint32_t) + words_size;
+
+    writer.Write(n_words);    result += sizeof(n_words);
+    writer.Write(n_uwords);   result += sizeof(n_uwords);
+    writer.Write(final_offset); result += sizeof(final_offset);
+
+    uint32_t pos = 0;
+    writer.Write(pos); result += sizeof(pos);
+    for (const auto& str : reverse_dict) {
+        pos += static_cast<uint32_t>(str.size());
+        writer.Write(pos); result += sizeof(pos);
+    }
+    for (const auto& str : reverse_dict) {
+        writer.Write(str.data(), str.size());
+        result += str.size();
+    }
+
+    ColumnTypeInt64 helper;
+    result += helper.WriteType(idx, writer);
+
+    return result;
+}
+
+ColumnData ColumnTypeStringLZW::GetBatch(size_t size, FileReader& reader, const ScanOptions* options) {
+    constexpr size_t kBloomWords = 256;
+    constexpr size_t kBloomBytes = kBloomWords * sizeof(uint64_t);
+
+    // Same bloom check as ColumnTypeString
+    if (options && ExperimentConfig::Get().use_bloom) {
+        const auto* str_opts = static_cast<const StringScanOptions*>(options);
+        const char* bloom_ptr = reader.Peek(kBloomBytes);
+        uint64_t bloom_raw[kBloomWords];
+        std::memcpy(bloom_raw, bloom_ptr, kBloomBytes);
+        if (str_opts->bloom && !str_opts->bloom->CheckIn(bloom_raw, kBloomWords)) {
+            reader.Jump(size - kBloomBytes);
+            return std::vector<std::string_view>{};
+        }
+    } else {
+        reader.Jump(kBloomBytes);
+    }
+
+    uint16_t n_words = reader.Read<uint16_t>();
+    uint16_t n_uwords = reader.Read<uint16_t>();
+    uint32_t final_offset = reader.Read<uint32_t>();
+
+    const char* offsets_raw = reinterpret_cast<const char*>(
+        reader.Peek((n_uwords + 1) * sizeof(uint32_t)));
+
+    size_t header_size = sizeof(n_words) + sizeof(n_uwords) + sizeof(final_offset) +
+                         (n_uwords + 1) * sizeof(uint32_t);
+    size_t raw_size = final_offset - header_size;
+    const char* raw = reader.Peek(raw_size);
+
+    ColumnTypeInt64 helper;
+    auto indices_data = helper.GetBatch(0, reader);
+    const auto& indices = std::get<std::vector<int64_t>>(indices_data);
+
+    // Decode LZW: reassemble original strings by following index tokens until \0
+    // Each token is a dict entry; accumulate until we hit a token ending with \0.
+    std::vector<std::string> result;
+    result.reserve(n_words);
+    std::string cur_str;
+
+    for (size_t j = 0; j < indices.size(); ++j) {
+        auto pos = static_cast<size_t>(indices[j]);
+        uint32_t cur_off, next_off;
+        std::memcpy(&cur_off, offsets_raw + pos * sizeof(uint32_t), sizeof(uint32_t));
+        std::memcpy(&next_off, offsets_raw + (pos + 1) * sizeof(uint32_t), sizeof(uint32_t));
+        cur_str.append(raw + cur_off, next_off - cur_off);
+        if (!cur_str.empty() && cur_str.back() == '\0') {
+            cur_str.pop_back();
+            result.push_back(std::move(cur_str));
+            cur_str.clear();
+        }
+    }
+
+    // Return as vector<string> since string_view into stack buffer isn't safe
     return result;
 }
 

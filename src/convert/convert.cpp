@@ -14,8 +14,16 @@
 
 namespace column_engine {
 void ConvertToColumnar(const std::string& input_path, const std::string& schema_path,
-                       const std::string& output_path, const size_t batch_size) {
+                       const std::string& output_path, const size_t batch_size,
+                       const bool use_lzw) {
     Schema schema = ReadSchema(schema_path);
+    if (use_lzw) {
+        for (auto& col : schema.columns) {
+            if (col.type->GetTypeName() == "string") {
+                col.type = std::make_shared<ColumnTypeStringLZW>();
+            }
+        }
+    }
 
     std::vector<std::vector<ColumnValue>> batch(schema.columns.size());
     std::vector<BatchMetaData> batch_meta;
